@@ -1,0 +1,22 @@
+# Docker Compose override for development
+# This file is automatically loaded by docker-compose and provides
+# development-specific configurations like volume mounts and auto-reload
+
+services:
+  backend:
+    volumes:
+      - ./backend:/app/backend
+      - ./shared:/app/shared
+    environment:
+      - FLASK_DEBUG=1
+    command: ["python", "-m", "flask", "run", "--reload"]
+    
+  flucoma_service:
+    volumes:
+      - ./microservices:/app/microservices
+      - ./shared:/app/shared
+      
+  librosa_service:
+    volumes:
+      - ./microservices:/app/microservices
+      - ./shared:/app/shared

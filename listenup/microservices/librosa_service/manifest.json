@@ -1,0 +1,5 @@
+{
+  "service_name": "librosa-service",
+  "description": "Performs various audio signal analysis operations using librosa.",
+  "steps": []
+}

@@ -1,0 +1,4 @@
+# Development requirements - includes all dependencies for IDE support
+-r requirements/dev.txt
+
+# Add any workspace-specific development tools
