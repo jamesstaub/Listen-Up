@@ -1,5 +1,5 @@
 # shared/schemas/job_step.py
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from pydantic import BaseModel, Field
 from ..enums.job_step_state_enum import JobStepState
 import uuid
@@ -15,8 +15,11 @@ class JobStep(BaseModel):
     name: str
     order: int
     status: JobStepState = JobStepState.PENDING
-    inputs: Dict[str, Any] = Field(default_factory=dict)
-    outputs: Dict[str, Any] = Field(default_factory=dict)
+    service: Optional[str] = None  # Which microservice should handle this step
+    operation: Optional[str] = None  # Which operation within the service
+    parameters: Dict[str, Any] = Field(default_factory=dict)
+    inputs: List[str] = Field(default_factory=list)  # List of absolute URIs
+    outputs: List[str] = Field(default_factory=list)  # List of absolute URIs
     error_message: Optional[str] = None
     started_at: Optional[float] = None
     finished_at: Optional[float] = None
@@ -25,9 +28,9 @@ class JobStep(BaseModel):
         self.status = JobStepState.RUNNING
         self.started_at = time.time()
 
-    def mark_complete(self, outputs: Dict[str, Any] = None):
+    def mark_complete(self, outputs: Optional[List[str]] = None):
         self.status = JobStepState.COMPLETE
-        self.outputs = outputs or {}
+        self.outputs = outputs or []
         self.finished_at = time.time()
 
     def mark_failed(self, error_message: str):

@@ -1,56 +1,55 @@
-from shared.modules.job.enums.job_step_state_enum import JobStepState
-from pymongo.errors import PyMongoError
-from shared.modules.job.events import JobEvent
 from shared.modules.queue.queue_service import QueueService
-from ..job.models.job_step_model import JobStepModel
+from shared.modules.queue.redis_client import RedisQueueClient
+from shared.modules.job.events import JobEvent
+from backend.modules.job.job_orchestrator_service import JobOrchestratorService
+from typing import Dict, Any
+
+"""
+Backend Queue Service is responsible for:
+1. Listening for job status events from microservices
+2. Delegating business logic to JobOrchestratorService
+
+This service should be thin and only handle queue interactions.
+The actual job orchestration logic is handled by JobOrchestratorService.
+"""
+
 
 class BackendQueueService(QueueService):
-    def __init__(self, db, mongo_client):
-        self.db = db
-        self.mongo_client = mongo_client
+    """
+    Simplified queue service that only handles queue operations.
+    All business logic is delegated to JobOrchestratorService.
+    """
+    
+    def __init__(self, mongo_db):
+        # Create Redis client for listening to status events FROM microservices
+        redis_client = RedisQueueClient(queue_name="job_status_events")
+        super().__init__(queue_client=redis_client)
+        self.orchestrator = JobOrchestratorService(mongo_db)
 
-    def handle_event(self, event: dict):
-        job_event = JobEvent(**event)
-        job_id = job_event.job_id
-
-        MAX_RETRIES = 5
-        retries = 0
-
-        while retries < MAX_RETRIES:
-            with self.mongo_client.start_session() as session:
-                try:
-                    session.start_transaction()
-                    self._update_job_status_in_mongo(session, job_id, job_event)
-                    session.commit_transaction()
-                    break
-                except PyMongoError:
-                    session.abort_transaction()
-                    retries += 1
-
-    def _update_job_status_in_mongo(self, session, job_id, job_event: JobEvent):
-        jobs_collection = self.db.jobs
-
-        if "step_id" in job_event.payload:
-            step_id = job_event.payload["step_id"]
-            step_status = job_event.payload.get("step_state")
-            update_fields = {"outputs": job_event.payload.get("step_outputs", {})}
-
-            if isinstance(step_status, str):
-                step_status = JobStepState(step_status)
-
-            if step_status is not None and isinstance(step_status, JobStepState):
-                JobStepModel(jobs_collection).update_status(
-                    job_id=job_id,
-                    step_id=step_id,
-                    status=step_status,
-                    updates=update_fields
-                )
+    def handle_event(self, event: JobEvent):
+        """
+        Handle incoming events from the queue.
+        Delegate all business logic to the orchestrator.
+        """
+        try:
+            event_data = event.dict() if hasattr(event, 'dict') else event.__dict__
+            print(f"📨 Backend received event: {event_data.get('event_type', 'unknown')}")
+            
+            # Delegate to orchestrator based on event type
+            event_type = event_data.get('event_type')
+            
+            if event_type in ['JOB_STEP_COMPLETE', 'JOB_STEP_FAILED']:
+                # This is a status event from a microservice
+                self.orchestrator.handle_step_status_event(event_data)
             else:
-                # TODO: Log invalid step_status error
-                pass
-        else:
-            update_doc = {
-                "$set": {"status": job_event.status},
-                "$push": {"logs": job_event.dict()},
-            }
-            jobs_collection.find_one_and_update({"_id": job_id}, update_doc, session=session)
+                print(f"⚠️  Unknown event type: {event_type}")
+                
+        except Exception as e:
+            print(f"❌ Error handling queue event: {str(e)}")
+            
+    def start_listening(self):
+        """
+        Start the queue listening loop.
+        """
+        print("🎧 BackendQueueService starting to listen for job status events...")
+        self.run()  # This calls the parent QueueService.run() method

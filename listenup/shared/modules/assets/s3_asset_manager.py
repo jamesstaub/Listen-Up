@@ -6,7 +6,7 @@ filestore. It generates an organized URL structure based on job metadata.
 """
 import os
 import time
-from asset_manager import AssetManager
+from shared.modules.assets.asset_manager import AssetManager
 
 class S3AssetManager(AssetManager):
     """

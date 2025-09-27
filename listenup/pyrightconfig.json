@@ -1,0 +1,18 @@
+{
+    "include": [
+        "backend",
+        "shared", 
+        "microservices",
+        "microservices_shared"
+    ],
+    "extraPaths": [
+        ".",
+        "backend",
+        "shared",
+        "microservices", 
+        "microservices_shared"
+    ],
+    "pythonVersion": "3.12",
+    "reportMissingImports": "warning",
+    "reportMissingTypeStubs": false
+}

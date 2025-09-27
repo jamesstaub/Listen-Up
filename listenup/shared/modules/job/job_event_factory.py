@@ -3,8 +3,20 @@ from shared.modules.job.events import JobEvent, EventType
 from .models.job import Job
 from .models.job_step import JobStep
 
+
 class JobEventFactory:
     """Factory for building JobEvent objects from Jobs or JobSteps."""
+
+    @staticmethod
+    def _serialize_job_for_payload(job: "Job") -> Dict[str, Any]:
+        """Manually serialize job to handle datetime objects."""
+        job_dict = job.dict(exclude_none=True)
+        # Convert datetime objects to ISO strings
+        if job_dict.get('created_at'):
+            job_dict['created_at'] = job.created_at.isoformat()
+        if job_dict.get('updated_at'):
+            job_dict['updated_at'] = job.updated_at.isoformat()
+        return job_dict
 
     @staticmethod
     def from_new_job(job: "Job") -> JobEvent:
@@ -13,7 +25,8 @@ class JobEventFactory:
             type=EventType.JOB_SUBMIT,
             status=job.status,
             payload={
-                "steps": [step.dict() for step in job.steps],
+                "job": JobEventFactory._serialize_job_for_payload(job),
+                "steps": [step.dict(exclude_none=True) for step in job.steps],
                 "created_at": job.created_at.isoformat() if job.created_at else None,
             },
         )

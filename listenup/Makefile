@@ -9,7 +9,7 @@
 #   make install - Production-style dependency installation
 #   make clean   - Clean up build artifacts
 #
-.PHONY: all install dev venv install-dev setup-dev-env frontend backend microservices docker-up docker-down clean clean-dev clean-venv clean-all test help
+.PHONY: all install dev venv install-dev setup-dev-env frontend backend microservices docker-up docker-down docker-restart-backend docker-restart-flucoma docker-restart-librosa docker-restart-microservices clean clean-dev clean-venv clean-all test help
 
 # Python and virtual environment settings
 VENV_DIR = venv
@@ -95,6 +95,19 @@ docker-up:
 docker-down:
 	docker-compose down
 
+# Restart specific services after code changes
+docker-restart-backend:
+	docker-compose restart backend
+
+docker-restart-flucoma:
+	docker-compose restart flucoma_service
+
+docker-restart-librosa:
+	docker-compose restart librosa_service
+
+docker-restart-microservices:
+	docker-compose restart flucoma_service librosa_service
+
 # === CLEANUP OPERATIONS ===
 
 # Clean up build artifacts and Python cache
@@ -153,8 +166,12 @@ help:
 	@echo "  microservices - Install microservices dependencies only"
 	@echo ""
 	@echo "=== DOCKER ==="
-	@echo "  docker-up    - Start all containers with docker-compose"
-	@echo "  docker-down  - Stop all containers"
+	@echo "  docker-up              - Start all containers with docker-compose"
+	@echo "  docker-down            - Stop all containers"
+	@echo "  docker-restart-backend - Restart just the backend service"
+	@echo "  docker-restart-flucoma - Restart just the flucoma service"
+	@echo "  docker-restart-librosa - Restart just the librosa service"
+	@echo "  docker-restart-microservices - Restart all microservices"
 	@echo ""
 	@echo "=== MAINTENANCE ==="
 	@echo "  clean        - Clean up build artifacts and Python cache"

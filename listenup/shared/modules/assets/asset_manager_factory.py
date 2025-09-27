@@ -6,9 +6,9 @@ implementation based on environment variables. This decouples the main
 application from the concrete storage provider.
 """
 import os
-from asset_manager_base import AssetManager
-from local_asset_manager import LocalAssetManager
-from s3_asset_manager import S3AssetManager
+from shared.modules.assets.asset_manager import AssetManager
+from shared.modules.assets.local_asset_manager import LocalAssetManager
+from shared.modules.assets.s3_asset_manager import S3AssetManager
 
 def create_asset_manager() -> AssetManager:
     """

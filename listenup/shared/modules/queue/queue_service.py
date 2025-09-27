@@ -13,8 +13,8 @@ class QueueService(ABC):
     Subclass this in microservices and backend to implement handle_event.
     """
 
-    def __init__(self, queue_handler, poll_timeout=60, logger=None):
-        self.queue_handler = queue_handler
+    def __init__(self, queue_client, poll_timeout=60, logger=None):
+        self.queue_client = queue_client
         self.poll_timeout = poll_timeout
         self.logger = logger or logging.getLogger(self.__class__.__name__)
 
@@ -22,7 +22,7 @@ class QueueService(ABC):
         self.logger.info(f"{self.__class__.__name__} starting event loop...")
         while True:
             try:
-                raw = self.queue_handler.listen_for_job(timeout=self.poll_timeout)
+                raw = self.queue_client.listen_for_event(timeout=self.poll_timeout)
                 if raw:
                     try:
                         event = JobEvent.parse_obj(raw)

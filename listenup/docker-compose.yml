@@ -43,6 +43,7 @@ services:
       - "8000:8000"
 
   flucoma_service:
+    platform: linux/amd64  # Force x86-64 architecture for FluCoMa compatibility
     build:
       context: .
       dockerfile: microservices/flucoma_service/Dockerfile
@@ -52,6 +53,7 @@ services:
       - REDIS_PORT=6379
     depends_on:
       - redis
+    working_dir: /app/microservices/flucoma_service
     command: ["python", "app.py"]
 
   librosa_service:

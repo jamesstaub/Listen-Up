@@ -8,7 +8,7 @@ filesystem instead of a remote filestore.
 import os
 import shutil
 import time
-from asset_manager import AssetManager
+from shared.modules.assets.asset_manager import AssetManager
 
 class LocalAssetManager(AssetManager):
     """

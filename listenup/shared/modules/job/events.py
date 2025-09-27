@@ -1,6 +1,8 @@
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
+from shared.modules.job.enums.job_step_state_enum import JobStepState
 from pydantic import BaseModel, Field
+from datetime import datetime
 import time
 
 
@@ -10,6 +12,9 @@ class EventType(str, Enum):
     PROGRESS_UPDATE = "PROGRESS_UPDATE"
     LOG_MESSAGE = "LOG_MESSAGE"
     JOB_SUBMIT = "JOB_SUBMIT"
+    JOB_STEP_EXECUTE = "JOB_STEP_EXECUTE"
+    JOB_STEP_COMPLETE = "JOB_STEP_COMPLETE"
+    JOB_STEP_FAILED = "JOB_STEP_FAILED"
 
 
 class JobEvent(BaseModel):
@@ -38,3 +43,40 @@ class JobEvent(BaseModel):
 
     class Config:
         use_enum_values = True
+
+
+class JobStepEvent(BaseModel):
+    """Event sent TO microservices to execute a single step"""
+    event_type: str = "JOB_STEP_EXECUTE"
+    job_id: str
+    step_id: str
+    step_name: str
+    service: str
+    operation: str
+    parameters: Dict[str, Any] = Field(default_factory=dict)
+    inputs: List[str] = Field(default_factory=list)  # List of absolute URIs
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat() if v else None
+        }
+
+
+
+class JobStepStatusEvent(BaseModel):
+    """Event sent FROM microservices after step completion"""
+    event_type: str  # JOB_STEP_COMPLETE, JOB_STEP_FAILED
+    job_id: str
+    step_id: str
+    step_name: str
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    status: JobStepState
+    outputs: List[str] = Field(default_factory=list)  # List of absolute URIs
+    metrics: Dict[str, Any] = Field(default_factory=dict)
+    error_message: Optional[str] = None
+    
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat() if v else None
+        }

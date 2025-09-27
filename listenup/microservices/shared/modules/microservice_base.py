@@ -1,10 +1,14 @@
 import os
 import logging
 from abc import ABC, abstractmethod
-from microservices_shared.modules.queue.microservice_queue_service import MicroserviceQueueService
+from microservices_shared.modules.queue.microservice_queue_service import (
+    MicroserviceQueueService,
+)
 from shared.modules.assets.asset_manager_factory import create_asset_manager
 from shared.modules.job.job_event_factory import JobEventFactory
-from microservices_shared.modules.job.machines.step_state_machine import StepStateMachine
+from microservices_shared.modules.job.machines.step_state_machine import (
+    StepStateMachine,
+)
 
 
 class MicroserviceBase(ABC):
@@ -35,10 +39,9 @@ class MicroserviceBase(ABC):
     def _get_redis_client(self):
         """Instantiate Redis client for job events."""
         from shared.modules.queue.redis_client import RedisQueueClient
+
         return RedisQueueClient(
-            host=self.redis_host,
-            port=self.redis_port,
-            queue_name="job_events"
+            host=self.redis_host, port=self.redis_port, queue_name="job_events"
         )
 
     def run(self):

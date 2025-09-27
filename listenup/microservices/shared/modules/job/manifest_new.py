@@ -60,12 +60,6 @@ class Manifest(ABC):
         print(f"📁 Created temp output directory: {temp_dir}")
         return temp_dir
 
-    def create_temp_directory(self, step_id: str) -> str:
-        """Create a temporary directory for a specific step."""
-        temp_dir = tempfile.mkdtemp(prefix=f"{self.service_name}_{step_id}_")
-        print(f"📁 Created temp directory for step {step_id}: {temp_dir}")
-        return temp_dir
-
     def download_inputs(self, input_uris: List[str], temp_dir: str) -> List[str]:
         """
         Download input files from URIs to local temporary files.
