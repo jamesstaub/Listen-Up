@@ -53,9 +53,18 @@ class JobStepEvent(BaseModel):
     step_name: str
     service: str
     operation: str
-    parameters: Dict[str, Any] = Field(default_factory=dict)
-    inputs: List[str] = Field(default_factory=list)  # List of absolute URIs
+    command: str = Field(..., description="Complete command template to execute")
+    expected_outputs: List[str] = Field(default_factory=list, description="Expected output file paths")
+    inputs: List[str] = Field(default_factory=list)  # List of absolute URIs for input files
+    
+    # File mapping information for the microservice
+    input_file_mapping: Dict[str, str] = Field(default_factory=dict, description="Maps command placeholders to input URIs")
+    output_file_mapping: Dict[str, str] = Field(default_factory=dict, description="Maps command placeholders to expected output paths")
+    
     timestamp: datetime = Field(default_factory=datetime.utcnow)
+    
+    # Keep parameters for backward compatibility/logging, but command is primary
+    parameters: Dict[str, Any] = Field(default_factory=dict, description="Original parameters for reference")
     
     class Config:
         json_encoders = {

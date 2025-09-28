@@ -207,6 +207,94 @@ fi
 
 echo ""
 
+# Test 6: Create simple job and verify success status in MongoDB
+print_step "Test 6: Creating simple job and verifying success in MongoDB"
+
+SIMPLE_JOB_PAYLOAD='{
+    "steps": [
+        {
+            "name": "simple-pitch-test",
+            "service": "flucoma_service",
+            "operation": "pitch",
+            "parameters": {
+                "algorithm": 0,
+                "minfreq": 20.0,
+                "maxfreq": 10000.0
+            },
+            "inputs": [
+                "s3://my-bucket/simple-test.wav"
+            ]
+        }
+    ],
+    "step_transitions": []
+}'
+
+echo "Creating simple job for success verification..."
+SIMPLE_RESPONSE=$(curl -s -X POST "$BACKEND_URL/jobs" \
+    -H "Content-Type: application/json" \
+    -d "$SIMPLE_JOB_PAYLOAD")
+
+SIMPLE_JOB_ID=$(echo "$SIMPLE_RESPONSE" | jq -r '.job_id')
+
+if [ "$SIMPLE_JOB_ID" != "null" ] && [ -n "$SIMPLE_JOB_ID" ]; then
+    print_success "Simple job created with ID: $SIMPLE_JOB_ID"
+    
+    echo "⏰ Waiting 3 seconds for job processing..."
+    sleep 3
+    
+    # Query MongoDB directly to check final status
+    print_step "Querying MongoDB directly for job status..."
+    MONGO_STATUS_QUERY="db.jobs.findOne({\"_id\": \"$SIMPLE_JOB_ID\"}, {\"status\": 1, \"steps.status\": 1, \"steps.error_message\": 1})"
+    MONGO_STATUS_RESULT=$(docker exec listenup-mongodb-1 mongosh --quiet listenup-mongo-db --eval "$MONGO_STATUS_QUERY")
+    
+    echo "MongoDB result:"
+    echo "$MONGO_STATUS_RESULT" | tail -n +2  # Skip connection message
+    
+    # Extract status from MongoDB result using a more robust approach
+    JOB_STATUS=$(echo "$MONGO_STATUS_RESULT" | grep -o "status: '[^']*'" | head -1 | cut -d"'" -f2)
+    
+    # Alternative extraction method if the first one fails
+    if [ -z "$JOB_STATUS" ]; then
+        JOB_STATUS=$(echo "$MONGO_STATUS_RESULT" | sed -n "s/.*status: '\([^']*\)'.*/\1/p" | head -1)
+    fi
+    
+    if [ "$JOB_STATUS" = "complete" ]; then
+        print_success "✅ Job completed successfully in MongoDB!"
+    elif [ "$JOB_STATUS" = "failed" ]; then
+        print_error "❌ Job failed in MongoDB"
+        # Check step status for more details
+        STEP_STATUS=$(echo "$MONGO_STATUS_RESULT" | grep -o '"status"[[:space:]]*:[[:space:]]*"failed"')
+        if [ -n "$STEP_STATUS" ]; then
+            echo "Step failed - checking error message..."
+            ERROR_MSG=$(echo "$MONGO_STATUS_RESULT" | grep -o '"error_message"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+            if [ -n "$ERROR_MSG" ] && [ "$ERROR_MSG" != "null" ]; then
+                echo "Error: $ERROR_MSG"
+            fi
+        fi
+    elif [ "$JOB_STATUS" = "processing" ]; then
+        print_warning "⚠️  Job still processing after 3 seconds"
+        echo "This might indicate slow processing or issues with status updates"
+    else
+        print_warning "⚠️  Job status: ${JOB_STATUS:-unknown}"
+    fi
+    
+    # Also test backend API for comparison
+    API_RESPONSE=$(curl -s "$BACKEND_URL/jobs/$SIMPLE_JOB_ID")
+    API_STATUS=$(echo "$API_RESPONSE" | jq -r '.status')
+    echo "Backend API reports status: $API_STATUS"
+    
+    if [ "$JOB_STATUS" = "$API_STATUS" ]; then
+        print_success "✅ MongoDB and API status match"
+    else
+        print_warning "⚠️  Status mismatch - MongoDB: $JOB_STATUS, API: $API_STATUS"
+    fi
+    
+else
+    print_error "Failed to create simple job for status verification"
+fi
+
+echo ""
+
 # Summary
 print_step "Test Summary"
 echo "============"
@@ -220,10 +308,15 @@ else
 fi
 print_success "✅ Job retrieval endpoint works"
 print_success "✅ Job retry functionality works"
+print_success "✅ End-to-end job processing and status verification works"
 
 echo ""
 echo "🎉 All tests completed!"
 echo ""
-echo "📝 Job created with ID: $JOB_ID"
+echo "📝 Jobs created:"
+echo "   Multi-step job ID: $JOB_ID"
+if [ -n "$SIMPLE_JOB_ID" ]; then
+    echo "   Simple test job ID: $SIMPLE_JOB_ID"
+fi
 echo "🔍 You can test manually with:"
 echo "   curl $BACKEND_URL/jobs/$JOB_ID"

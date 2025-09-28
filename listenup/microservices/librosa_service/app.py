@@ -1,23 +1,35 @@
 
 import os
-from microservices_shared.modules.microservice_base import MicroserviceBase
+from microservices_shared.modules.queue.command_executor_queue_service import CommandExecutorQueueService
 
 SERVICE_NAME = "librosa_service"
+QUEUE_NAME = f"{SERVICE_NAME}_queue"
 
-class LibrosaMicroservice(MicroserviceBase):
-    def get_queue_service_class(self):
-        from microservices_shared.modules.queue.microservice_queue_service import MicroserviceQueueService
-        return MicroserviceQueueService
+
+def main():
+    """Main entry point for Librosa microservice."""
+    print(f"🎵 Starting {SERVICE_NAME}...")
     
-    def get_manifest(self):
-        from microservices.librosa_service.manifest import LibrosaManifest
-        return LibrosaManifest()
+    try:
+        # Initialize command executor queue service  
+        queue_service = CommandExecutorQueueService(
+            queue_name=QUEUE_NAME,
+            service_name=SERVICE_NAME
+        )
+        
+        print(f"🚀 {SERVICE_NAME} ready to process messages from {QUEUE_NAME}")
+        
+        # Start processing messages
+        queue_service.process_messages()
+        
+    except KeyboardInterrupt:
+        print(f"\n👋 Shutting down {SERVICE_NAME}...")
+    except Exception as e:
+        print(f"❌ Error in {SERVICE_NAME}: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 if __name__ == "__main__":
-    print("Librosa microservice starting...")
-    service = LibrosaMicroservice(
-        service_name=SERVICE_NAME
-    )
-    service.run()
+    main()
 

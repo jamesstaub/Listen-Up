@@ -1,8 +1,10 @@
 from shared.modules.queue.queue_service import QueueService
 from shared.modules.queue.redis_client import RedisQueueClient
-from shared.modules.job.events import JobEvent
+from shared.modules.job.events import JobEvent, JobStepStatusEvent
 from backend.modules.job.job_orchestrator_service import JobOrchestratorService
 from typing import Dict, Any
+import json
+import time
 
 """
 Backend Queue Service is responsible for:
@@ -26,26 +28,64 @@ class BackendQueueService(QueueService):
         super().__init__(queue_client=redis_client)
         self.orchestrator = JobOrchestratorService(mongo_db)
 
-    def handle_event(self, event: JobEvent):
+    def run(self):
+        """
+        Override the base run method to handle JobStepStatusEvent instead of JobEvent.
+        """
+        print(f"🎧 {self.__class__.__name__} starting event loop...")
+        while True:
+            try:
+                raw_event = self.queue_client.listen_for_event(timeout=self.poll_timeout)
+                if raw_event:
+                    print(f"📥 Backend received raw event from queue: {raw_event}")
+                    # Don't try to parse as JobEvent - pass raw data directly to handle_event
+                    self.handle_event(raw_event)
+                else:
+                    print("🔍 No events found. Still listening...")
+            except Exception as e:
+                print(f"❌ An error occurred in the listening loop: {e}")
+                import traceback
+                traceback.print_exc()
+                time.sleep(10)
+
+    def handle_event(self, event: Any):
         """
         Handle incoming events from the queue.
-        Delegate all business logic to the orchestrator.
+        Parse JobStepStatusEvent directly without JobEvent validation.
         """
         try:
-            event_data = event.dict() if hasattr(event, 'dict') else event.__dict__
-            print(f"📨 Backend received event: {event_data.get('event_type', 'unknown')}")
+            print(f"🔥 Backend queue listener received raw event data!")  # Debug log
+            print(f"📨 Backend received event: {event}")
             
-            # Delegate to orchestrator based on event type
-            event_type = event_data.get('event_type')
+            # Parse as string if needed
+            if isinstance(event, str):
+                event = json.loads(event)
             
-            if event_type in ['JOB_STEP_COMPLETE', 'JOB_STEP_FAILED']:
-                # This is a status event from a microservice
-                self.orchestrator.handle_step_status_event(event_data)
+            # Get the event type from the raw data
+            event_type = event.get('event_type')
+            print(f"📋 Event type: {event_type}")
+            
+            if event_type in ['JOB_STEP_COMPLETE', 'JOB_STEP_FAILED', 'JOB_STEP_PROCESSING']:
+                print(f"✅ Processing step status event...")
+                # This is a status event from a microservice - parse as JobStepStatusEvent
+                try:
+                    status_event = JobStepStatusEvent(**event)
+                    print(f"📊 Parsed status event: job_id={status_event.job_id}, step_id={status_event.step_id}, status={status_event.status}")
+                    # Convert the parsed event back to dict for orchestrator
+                    status_event_dict = status_event.dict()
+                    self.orchestrator.handle_step_status_event(status_event_dict)
+                    print(f"✅ Status event handled successfully")
+                except Exception as parse_error:
+                    print(f"❌ Failed to parse JobStepStatusEvent: {parse_error}")
+                    print(f"🔍 Raw event data: {event}")
             else:
                 print(f"⚠️  Unknown event type: {event_type}")
                 
         except Exception as e:
             print(f"❌ Error handling queue event: {str(e)}")
+            print(f"🔍 Exception details: {type(e).__name__}")
+            import traceback
+            traceback.print_exc()
             
     def start_listening(self):
         """

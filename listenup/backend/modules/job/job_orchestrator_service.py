@@ -1,12 +1,5 @@
 """
-The Job Orchestrator Service is responsible for managing and orchestrating jobs across various mic            # Start execution
-            if steps:
-                self._start_job_execution(saved_job)
-
-            # ✅ Use model_dump_json_json() for proper JSON serialization of datetime objects
-            return job.model_dump_json_json()
-
-        except Exception as e:es.
+The Job Orchestrator Service is responsible for managing and orchestrating jobs across various microservices.
 This is the business logic of interpreting the job data and deciding what happens next.
 
 - handles writing the Job record to mongodb
@@ -27,6 +20,9 @@ from shared.modules.job.enums.job_status_enum import JobStatus
 from shared.modules.job.enums.job_step_state_enum import JobStepState
 
 from shared.modules.queue.redis_client import RedisQueueClient
+
+# Import the manifest factory for command construction
+from backend.external.manifest_factory import ManifestFactory
 
 class JobOrchestratorService:
     """
@@ -55,6 +51,37 @@ class JobOrchestratorService:
         
         queue_name = f"{service_name}_queue"
         return RedisQueueClient(queue_name=queue_name)
+    
+    def _construct_command_for_step(self, step_data: Dict[str, Any], inputs: List[str]) -> tuple:
+        """
+        Construct command template and file mappings for a step using the appropriate manifest.
+        
+        Args:
+            step_data: Step data containing service, operation, and parameters
+            inputs: List of input URIs
+            
+        Returns:
+            tuple: (command_template, file_mappings_dict)
+        """
+        service = step_data['service']
+        operation = step_data['operation']
+        parameters = step_data.get('parameters', {})
+        
+        # Get the appropriate manifest
+        manifest = ManifestFactory.create_manifest(service)
+        
+        # Construct the command template and file mappings
+        command_template, file_mappings = manifest.construct_command(
+            operation=operation,
+            inputs=inputs,
+            parameters=parameters,
+            output_directory="/tmp/outputs"
+        )
+        
+        print(f"🔨 Constructed command template for {service}.{operation}: {command_template}")
+        print(f"   File mappings: {file_mappings}")
+        
+        return command_template, file_mappings
     
     def create_job(self, steps_data: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
@@ -251,15 +278,25 @@ class JobOrchestratorService:
             JobStepState.PROCESSING
         )
         
-        # Create step event with chained inputs
+        # Merge inputs for this step
+        merged_inputs = self._merge_inputs(step_data.get('inputs', []), previous_outputs)
+        
+        # Construct command template and file mappings using manifest
+        command_template, file_mappings = self._construct_command_for_step(step_data, merged_inputs)
+        
+        # Create step event with constructed command template
         step_event = JobStepEvent(
             job_id=job_data['job_id'],
             step_id=step_data['step_id'],
             step_name=step_data['name'],
             service=step_data['service'],
             operation=step_data['operation'],
-            parameters=step_data.get('parameters', {}),
-            inputs=self._merge_inputs(step_data.get('inputs', []), previous_outputs)
+            command=command_template,
+            expected_outputs=list(file_mappings.get('output_mapping', {}).values()),
+            inputs=merged_inputs,
+            input_file_mapping=file_mappings.get('input_mapping', {}),
+            output_file_mapping=file_mappings.get('output_mapping', {}),
+            parameters=step_data.get('parameters', {})  # Keep for reference
         )
         
         # Use model_dump_json() instead of dict() for proper JSON serialization of datetime objects
@@ -342,6 +379,14 @@ class JobOrchestratorService:
             JobStepState.PROCESSING
         )
 
+        # Construct command template and file mappings using manifest
+        step_data = {
+            'service': first_step.service,
+            'operation': first_step.operation,
+            'parameters': first_step.parameters
+        }
+        command_template, file_mappings = self._construct_command_for_step(step_data, first_step.inputs)
+
         # Create and send step execution event
         step_event = JobStepEvent(
             job_id=job.job_id,
@@ -349,8 +394,12 @@ class JobOrchestratorService:
             step_name=first_step.name,
             service=first_step.service,
             operation=first_step.operation,
-            parameters=first_step.parameters,
-            inputs=first_step.inputs
+            command=command_template,
+            expected_outputs=list(file_mappings.get('output_mapping', {}).values()),
+            inputs=first_step.inputs,
+            input_file_mapping=file_mappings.get('input_mapping', {}),
+            output_file_mapping=file_mappings.get('output_mapping', {}),
+            parameters=first_step.parameters  # Keep for reference
         )
 
         # Use model_dump_json() instead of dict() for proper JSON serialization of datetime objects
@@ -439,6 +488,12 @@ class JobOrchestratorService:
             JobStepState.PROCESSING
         )
         
+        # Merge inputs for the next step
+        merged_inputs = self._merge_inputs(next_step_data.get('inputs', []), mapped_previous_outputs)
+        
+        # Construct command template and file mappings using manifest
+        command_template, file_mappings = self._construct_command_for_step(next_step_data, merged_inputs)
+        
         # Create step event with original inputs + mapped previous outputs
         step_event = JobStepEvent(
             job_id=job_dict['job_id'],
@@ -446,8 +501,12 @@ class JobOrchestratorService:
             step_name=next_step_data['name'],
             service=next_step_data['service'],
             operation=next_step_data['operation'],
-            parameters=next_step_data.get('parameters', {}),
-            inputs=self._merge_inputs(next_step_data.get('inputs', []), mapped_previous_outputs)
+            command=command_template,
+            expected_outputs=list(file_mappings.get('output_mapping', {}).values()),
+            inputs=merged_inputs,
+            input_file_mapping=file_mappings.get('input_mapping', {}),
+            output_file_mapping=file_mappings.get('output_mapping', {}),
+            parameters=next_step_data.get('parameters', {})  # Keep for reference
         )
         
         # Use model_dump_json() instead of dict() for proper JSON serialization of datetime objects

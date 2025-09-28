@@ -1,6 +1,5 @@
 import traceback
-from microservices_shared.modules.queue.microservice_queue_service import MicroserviceQueueService
-from manifest import FlucomaManifest
+from microservices_shared.modules.queue.command_executor_queue_service import CommandExecutorQueueService
 
     
 SERVICE_NAME = "flucoma_service"
@@ -12,15 +11,10 @@ def main():
     print(f"🎵 Starting {SERVICE_NAME}...")
     
     try:
-        # Initialize manifest
-        manifest = FlucomaManifest()
-        print(f"📋 Loaded manifest for {SERVICE_NAME}")
-        
-        # Initialize queue service
-        queue_service = MicroserviceQueueService(
+        # Initialize command executor queue service (no manifest needed!)
+        queue_service = CommandExecutorQueueService(
             queue_name=QUEUE_NAME,
-            service_name=SERVICE_NAME,
-            manifest=manifest
+            service_name=SERVICE_NAME
         )
         
         print(f"🚀 {SERVICE_NAME} ready to process messages from {QUEUE_NAME}")
