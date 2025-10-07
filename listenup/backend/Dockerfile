@@ -10,14 +10,15 @@ WORKDIR /app
 # Install system dependencies
 RUN apt-get update && apt-get install -y gcc && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
+# Copy only requirements files for dependency installation
 COPY requirements/ ./requirements/
 COPY backend/requirements.txt ./backend/
+
+# Install Python dependencies
 RUN pip install --upgrade pip && pip install -r backend/requirements.txt
 
-# Copy backend code and main shared directory
-COPY backend/ ./backend/
-COPY shared/ ./shared/
+# Note: Source code will be mounted as volumes in docker-compose.yml
+# This allows for live code updates without rebuilding the container
 
 # Expose port for Flask
 EXPOSE 8000

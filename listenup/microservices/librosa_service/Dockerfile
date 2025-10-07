@@ -3,16 +3,17 @@ FROM python:3.12
 # Install system dependencies
 RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
 
-
-# Copy microservice code and shared modules
+# Set up working directory
 WORKDIR /app
-COPY microservices/librosa_service/app.py ./
+
+# Copy only requirements files for dependency installation
 COPY requirements/ ./requirements/
-COPY microservices/librosa_service/requirements.txt ./librosa_service/
-# Copy both shared directories to avoid name collisions
-COPY shared /app/shared
-COPY microservices/shared /app/microservices_shared
+COPY microservices/librosa_service/requirements.txt ./microservices/librosa_service/
 
-RUN pip install --no-cache-dir -r librosa_service/requirements.txt
+# Install Python dependencies  
+RUN pip install --no-cache-dir -r microservices/librosa_service/requirements.txt
 
-CMD ["python", "app.py"]
+# Note: Source code will be mounted as volumes in docker-compose.yml
+# This allows for live code updates without rebuilding the container
+
+CMD ["python", "microservices/librosa_service/app.py"]

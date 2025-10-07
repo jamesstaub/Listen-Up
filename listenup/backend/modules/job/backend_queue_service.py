@@ -1,6 +1,6 @@
 from shared.modules.queue.queue_service import QueueService
 from shared.modules.queue.redis_client import RedisQueueClient
-from shared.modules.job.events import JobEvent, JobStepStatusEvent
+from shared.modules.job.models.job_step_status_event import JobStepStatusEvent
 from backend.modules.job.job_orchestrator_service import JobOrchestratorService
 from typing import Dict, Any
 import json

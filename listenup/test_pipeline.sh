@@ -76,36 +76,56 @@ JOB_PAYLOAD='{
         {
             "name": "harmonic-percussive-separation",
             "service": "flucoma_service",
-            "operation": "hpss",
-            "parameters": {
-                "harmfiltersize": 17,
-                "percfiltersize": 31,
-                "maskingmode": 0,
-                "fftsettings": [1024, 512, 1024]
+            "command_spec": {
+                "program": "fluid-hpss",
+                "flags": {
+                    "-source": "{{input_file}}",
+                    "-harmonic": "{{harmonic_output}}",
+                    "-percussive": "{{percussive_output}}",
+                    "-harmfiltersize": "17",
+                    "-percfiltersize": "31",
+                    "-maskingmode": "0",
+                    "-fftsettings": "1024 512 1024"
+                }
             },
-            "inputs": [
-                "s3://my-bucket/path/to/audio.wav"
-            ]
+            "inputs": {
+                "input_file": "s3://my-bucket/path/to/audio.wav"
+            },
+            "outputs": {
+                "harmonic_output": "s3://my-bucket/outputs/harmonic.wav",
+                "percussive_output": "s3://my-bucket/outputs/percussive.wav"
+            }
         },
         {
             "name": "pitch-analysis",
             "service": "flucoma_service",
-            "operation": "pitch",
-            "parameters": {
-                "algorithm": 0,
-                "minfreq": 20.0,
-                "maxfreq": 10000.0,
-                "unit": 0,
-                "fftsettings": [1024, 512, 1024]
+            "command_spec": {
+                "program": "fluid-pitch",
+                "flags": {
+                    "-source": "{{audio_input}}",
+                    "-features": "{{pitch_features}}",
+                    "-algorithm": "0",
+                    "-minfreq": "20.0",
+                    "-maxfreq": "10000.0",
+                    "-unit": "0",
+                    "-fftsettings": "1024 512 1024"
+                }
             },
-            "inputs": []
+            "inputs": {
+                "audio_input": "{{steps.harmonic-percussive-separation.outputs.harmonic_output}}"
+            },
+            "outputs": {
+                "pitch_features": "s3://my-bucket/outputs/pitch.csv"
+            }
         }
     ],
     "step_transitions": [
         {
             "from_step_name": "harmonic-percussive-separation",
-            "to_step_name": "pitch-analysis", 
-            "output_to_input_mapping": [0]
+            "to_step_name": "pitch-analysis",
+            "output_to_input_mapping": {
+                "harmonic_output": "audio_input"
+            }
         }
     ]
 }'
@@ -215,15 +235,22 @@ SIMPLE_JOB_PAYLOAD='{
         {
             "name": "simple-pitch-test",
             "service": "flucoma_service",
-            "operation": "pitch",
-            "parameters": {
-                "algorithm": 0,
-                "minfreq": 20.0,
-                "maxfreq": 10000.0
+            "command_spec": {
+                "program": "fluid-pitch",
+                "flags": {
+                    "-source": "{{input_audio}}",
+                    "-features": "{{output_features}}",
+                    "-algorithm": "0",
+                    "-minfreq": "20.0",
+                    "-maxfreq": "10000.0"
+                }
             },
-            "inputs": [
-                "s3://my-bucket/simple-test.wav"
-            ]
+            "inputs": {
+                "input_audio": "s3://my-bucket/simple-test.wav"
+            },
+            "outputs": {
+                "output_features": "s3://my-bucket/outputs/simple-pitch.csv"
+            }
         }
     ],
     "step_transitions": []

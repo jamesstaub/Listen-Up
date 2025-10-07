@@ -8,6 +8,57 @@ bp = Blueprint("job_controller", __name__)
 def create_job():
     """
     Create a new job and enqueue it for processing.
+
+    job_payload = {
+        "steps": [
+            {
+            "name": "convert_audio",
+            "service": "audio_service",
+            "command_spec": {
+                "program": "ffmpeg",
+                "flags": {
+                "-i": "{{input_file}}",
+                "-ar": "44100",
+                "-ac": "2"
+                },
+                "args": ["{{output_file}}"]
+            },
+            "inputs": {
+                "input_file": "s3://bucket/audio/input.wav"
+            },
+            "outputs": {
+                "output_file": "s3://bucket/audio/output.wav"
+            }
+            },
+            {
+            "name": "extract_features",
+            "service": "ml_service",
+            "command_spec": {
+                "program": "feature_extractor",
+                "flags": {
+                "--input": "{{audio_file}}"
+                },
+                "args": ["--format", "csv", "{{features_output}}"]
+            },
+            "inputs": {
+                "audio_file": "{{steps.convert_audio.outputs.output_file}}"
+            },
+            "outputs": {
+                "features_output": "s3://bucket/features/output.csv"
+            }
+            }
+        ],
+        "step_transitions": [
+            {
+            "from_step_name": "convert_audio",
+            "to_step_name": "extract_features",
+            "output_to_input_mapping": {
+                "output_file": "audio_file"
+            }
+            }
+        ]
+        }
+
     """
     try:
         payload = request.get_json(force=True)

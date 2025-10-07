@@ -1,5 +1,6 @@
 from typing import Any, Dict, Optional
-from shared.modules.job.events import JobEvent, EventType
+from shared.modules.job.models.job_event import JobEvent
+from shared.modules.job.enums.event_type import EventType
 from .models.job import Job
 from .models.job_step import JobStep
 

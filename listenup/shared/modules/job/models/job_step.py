@@ -1,42 +1,40 @@
-# shared/schemas/job_step.py
-from typing import Dict, Any, Optional, List
-from pydantic import BaseModel, Field
-from ..enums.job_step_state_enum import JobStepState
 import uuid
-import time
-
+from datetime import datetime
+from typing import Optional, Dict, Any, List
+from shared.modules.job.models.command_spec import CommandSpec
+from pydantic import BaseModel, Field
+from shared.modules.job.enums.job_step_state_enum import JobStepState
 
 class JobStep(BaseModel):
     """
-    Shared schema for a single step within a Job.
-    Used across microservices and backend.
+    Represents a single step in a Job.
+    Shared between backend, microservice, and orchestration layers.
     """
-    step_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str
-    order: int
-    status: JobStepState = JobStepState.PENDING
-    service: Optional[str] = None  # Which microservice should handle this step
-    operation: Optional[str] = None  # Which operation within the service
-    parameters: Dict[str, Any] = Field(default_factory=dict)
-    inputs: List[str] = Field(default_factory=list)  # List of absolute URIs
-    outputs: List[str] = Field(default_factory=list)  # List of absolute URIs
-    error_message: Optional[str] = None
-    started_at: Optional[float] = None
-    finished_at: Optional[float] = None
+    step_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    order: Optional[int] = None 
+    command_spec: Optional[CommandSpec] = None
+    state: JobStepState = JobStepState.PENDING
+    inputs: Dict[str, Any] = Field(default_factory=dict)    # Cloud URIs or job outputs
+    outputs: Dict[str, Any] = Field(default_factory=dict)   # Output artifacts (URIs or local paths)
+    log_tail: List[str] = Field(default_factory=list)
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
+    microservice: Optional[str] = None                      # Which service should run it
 
     def mark_running(self):
         self.status = JobStepState.RUNNING
-        self.started_at = time.time()
+        self.started_at = datetime.now()
 
-    def mark_complete(self, outputs: Optional[List[str]] = None):
+    def mark_complete(self, outputs: Optional[Dict[str, Any]] = None):
         self.status = JobStepState.COMPLETE
-        self.outputs = outputs or []
-        self.finished_at = time.time()
+        self.outputs = outputs or {}
+        self.finished_at = datetime.now()
 
     def mark_failed(self, error_message: str):
         self.status = JobStepState.FAILED
         self.error_message = error_message
-        self.finished_at = time.time()
+        self.finished_at = datetime.now()
 
     def is_complete(self) -> bool:
         return self.status == JobStepState.COMPLETE

@@ -12,6 +12,13 @@ class FlucomaManifest(BaseManifest):
     def __init__(self, bin_dir=None):
         super().__init__()
         self.service_name = "flucoma_service"
+
+        # FIXME: backend should not deal with service-specifics like bin_dir.
+        # this manifest should know about the public API of the microservice, in this case flucoma CLI.
+        # it should construct a command like "fluid-ampslice ..."
+        # the microservice should do a simple validation/mapping of the received command
+        # {'fluid-ampslice': /{bin_dir}/fluid-ampslice}
+        
         self.bin_dir = bin_dir or "/opt/flucoma-cli/FluidCorpusManipulation/bin"
         self.allowed_operations = self._get_allowed_operations()
 

@@ -41,6 +41,12 @@ services:
       - mongodb
     ports:
       - "8000:8000"
+    volumes:
+      # Mount shared directories as volumes for live code updates
+      - ./shared:/app/shared
+      - ./backend:/app/backend
+      # Mount microservices shared separately to avoid path conflicts  
+      - ./microservices/shared:/app/microservices_shared
 
   flucoma_service:
     platform: linux/amd64  # Force x86-64 architecture for FluCoMa compatibility
@@ -53,8 +59,13 @@ services:
       - REDIS_PORT=6379
     depends_on:
       - redis
-    working_dir: /app/microservices/flucoma_service
-    command: ["python", "app.py"]
+    working_dir: /app
+    command: ["python", "microservices/flucoma_service/app.py"]
+    volumes:
+      # Mount shared directories as volumes for live code updates
+      - ./shared:/app/shared  
+      - ./microservices/shared:/app/microservices_shared
+      - ./microservices/flucoma_service:/app/microservices/flucoma_service
 
   librosa_service:
     build:
@@ -66,7 +77,12 @@ services:
       - REDIS_PORT=6379
     depends_on:
       - redis
-    command: ["python", "app.py"]
+    command: ["python", "microservices/librosa_service/app.py"]
+    volumes:
+      # Mount shared directories as volumes for live code updates
+      - ./shared:/app/shared
+      - ./microservices/shared:/app/microservices_shared  
+      - ./microservices/librosa_service:/app/microservices/librosa_service
 
 volumes:
   pgdata:

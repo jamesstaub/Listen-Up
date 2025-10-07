@@ -4,7 +4,7 @@ import os
 from abc import ABC, abstractmethod
 from typing import Any
 
-from ..job.events import JobEvent
+from ..job.models.job_event import JobEvent
 
 
 class QueueService(ABC):

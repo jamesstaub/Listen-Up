@@ -60,14 +60,38 @@ class JobModel:
     # ----------------------------
     # Retrieval
     # ----------------------------
-    def get_job(self, job_id: str) -> Optional[Dict[str, Any]]:
+    def get_job(self, job_id: str) -> Optional[Job]:
         """
         Retrieve a job by ID.
         """
         job_doc = self.collection.find_one({"_id": job_id})
         if job_doc:
             job_doc["job_id"] = str(job_doc["_id"])
-        return job_doc
+            del job_doc["_id"]  # Remove MongoDB's _id field
+            return Job(**job_doc)
+        return None
+
+    def get_step_outputs(self, job_id: str, step_id: str) -> dict[str, Any]:
+        """
+        Retrieve the outputs of a specific step in a job as a dictionary.
+        
+        Args:
+            job_id: ID of the job
+            step_id: ID of the step
+        
+        Returns:
+            Dict of output_name -> output_value. Empty dict if none exist.
+        """
+        job = self.get_job(job_id)
+        if not job:
+            raise ValueError(f"Job not found: {job_id}")
+
+        step = next((s for s in job.steps if s.step_id == step_id), None)
+        if not step:
+            raise ValueError(f"Step not found: {step_id} in job {job_id}")
+
+        outputs = step.outputs if hasattr(step, 'outputs') and step.outputs else {}
+        return outputs if isinstance(outputs, dict) else {}
 
     # ----------------------------
     # Updates

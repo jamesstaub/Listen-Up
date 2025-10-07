@@ -5,9 +5,20 @@ import tempfile
 import uuid
 from typing import Any, Dict, List, Optional
 from shared.modules.queue.redis_client import RedisQueueClient
-from shared.modules.job.events import JobStepEvent, JobStepStatusEvent
+from shared.modules.job.models.job_step_event import JobStepEvent
+from shared.modules.job.models.job_step_status_event import JobStepStatusEvent
 from shared.modules.job.enums.job_step_state_enum import JobStepState
-from microservices_shared.modules.log.simple_logger import get_logger
+from microservices.shared.modules.log.simple_logger import get_logger
+
+# TODO need to wrap certain commands in utility scripts such as NMF
+# which outputs a single multi-channel file. in teh client, the NMF "step" can be a macro
+# that also includes options for buffer management like number of channels, encoding etc.
+# flucoma manifest will have a configuration map for what kinds of pre/post processing should happen based on
+# which particular argument. in this case the "components" argument determines how many expected channels
+# eg. "nmf": "buffer-compose", channel_count: "components"
+
+# Or we can simply count the number of channels on file, and the JobStepEvent will provide a parameter
+# for either multichannel or multi-file outputs (better without reading the specific flag name)
 
 
 class CommandExecutorQueueService:
