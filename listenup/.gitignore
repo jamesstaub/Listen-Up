@@ -29,9 +29,6 @@ ENV/
 .vscode/settings.json
 .idea/
 
-# Development symlinks (created by make dev)
-microservices_shared
-
 # OS
 .DS_Store
 Thumbs.db

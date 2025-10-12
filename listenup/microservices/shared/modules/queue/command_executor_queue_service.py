@@ -65,9 +65,12 @@ class CommandExecutorQueueService:
                 message_data = json.loads(message_data)
             
             # Parse the JobStepEvent
+            self.logger.info("🔍 About to create JobStepEvent")
             step_event = JobStepEvent(**message_data)
-            self.logger.info(f"🔄 Processing step: {step_event.step_id} | Operation: {step_event.operation}")
-            self.logger.info(f"🔨 Command template: {step_event.command}")
+            self.logger.info(f"✅ JobStepEvent created successfully")
+            self.logger.info(f"🔄 Processing step: {step_event.step_id} | Service: {step_event.microservice}")
+            self.logger.info(f"🔨 Command spec: {step_event.command_spec}")
+            self.logger.info(f"🔍 Step event attributes: {list(step_event.__dict__.keys())}")
             
             # Send "processing" status
             self._send_status_update(step_event, JobStepState.PROCESSING, "Processing step with file mapping")
@@ -80,25 +83,27 @@ class CommandExecutorQueueService:
             os.makedirs(output_dir, exist_ok=True)
             
             # Download input files and map to local paths
-            self.logger.info(f"🔍 About to download inputs: {step_event.input_file_mapping}")
+            self.logger.info(f"🔍 About to download inputs: {step_event.inputs}")
             local_input_mapping = self._download_and_map_inputs(
-                step_event.input_file_mapping, 
+                step_event.inputs, 
                 input_dir
             )
             self.logger.info(f"🗂️ Input mapping created: {local_input_mapping}")
             
             # Create output file paths mapping
-            self.logger.info(f"🔍 About to create output mapping: {step_event.output_file_mapping}")
+            self.logger.info(f"🔍 About to create output mapping: {step_event.outputs}")
             local_output_mapping = self._create_output_mapping(
-                step_event.output_file_mapping,
+                step_event.outputs,
                 output_dir
             )
             self.logger.info(f"🗂️ Output mapping created: {local_output_mapping}")
             
-            # Substitute placeholders in command with actual file paths
-            self.logger.info(f"🔍 About to substitute command template: {step_event.command}")
+            # Build command from resolved command_spec and substitute local file paths
+            self.logger.info(f"🔍 Building command from resolved spec: {step_event.command_spec}")
+            command_from_spec = self._build_command_from_spec(step_event.command_spec)
+            self.logger.info(f"🔧 Built command: {command_from_spec}")
             final_command = self._substitute_file_paths(
-                step_event.command,
+                command_from_spec,
                 local_input_mapping,
                 local_output_mapping
             )
@@ -123,8 +128,10 @@ class CommandExecutorQueueService:
             )
                 
         except Exception as e:
+            import traceback
             error_msg = f"Failed to execute command: {str(e)}"
             self.logger.error(error_msg)
+            self.logger.error(f"Full traceback: {traceback.format_exc()}")
             
             if step_event:
                 self._send_status_update(step_event, JobStepState.FAILED, error_msg)
@@ -271,6 +278,24 @@ class CommandExecutorQueueService:
             self.logger.info(f"📤 Will create {placeholder}: {local_path}")
         
         return local_mapping
+
+    def _build_command_from_spec(self, command_spec: Dict[str, Any]) -> str:
+        """Build a command string from a resolved CommandSpec dictionary."""
+        program = command_spec.get("program", "")
+        flags = command_spec.get("flags", {})
+        args = command_spec.get("args", [])
+        
+        # Start with the program
+        command_parts = [program]
+        
+        # Add flags (format: -flag value)
+        for flag, value in flags.items():
+            command_parts.extend([flag, str(value)])
+        
+        # Add positional args
+        command_parts.extend([str(arg) for arg in args])
+        
+        return " ".join(command_parts)
 
     def _substitute_file_paths(self, command_template: str, input_mapping: Dict[str, str], output_mapping: Dict[str, str]) -> str:
         """

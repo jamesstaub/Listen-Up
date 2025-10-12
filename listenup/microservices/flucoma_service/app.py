@@ -3,7 +3,7 @@ from microservices_shared.modules.queue.command_executor_queue_service import Co
 
     
 SERVICE_NAME = "flucoma_service"
-QUEUE_NAME = f"{SERVICE_NAME}_queue"
+QUEUE_NAME = f"{SERVICE_NAME}_requests"
 
 
 def main():

@@ -8,7 +8,7 @@ from shared.modules.job.models.job_step_status_event import JobStepStatusEvent
 from shared.modules.job.enums.job_step_state_enum import JobStepState
 from microservices.shared.modules.log.simple_logger import get_logger
 
-
+# DEPRECATED
 class MicroserviceQueueService:
     """
     Generic microservice queue service that delegates command construction 
