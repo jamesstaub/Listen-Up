@@ -8,10 +8,11 @@ RUN wget -O /tmp/FluCoMa-CLI-Linux-x64.tar.gz https://github.com/flucoma/flucoma
     && mkdir -p /opt/flucoma-cli \
     && tar -xzf /tmp/FluCoMa-CLI-Linux-x64.tar.gz -C /opt/flucoma-cli \
     && rm /tmp/FluCoMa-CLI-Linux-x64.tar.gz \
-    && chmod +x /opt/flucoma-cli/FluidCorpusManipulation/bin
+    && find /opt/flucoma-cli -name "fluid-*" -type f \
+    && chmod +x /opt/flucoma-cli/FluidCorpusManipulation/bin/*
 
-ENV PATH="/opt/flucoma-cli/FluCoMa-CLI-Linux-x64:$PATH"
 ENV FLUCOMA_BIN_DIR="/opt/flucoma-cli/FluidCorpusManipulation/bin"
+ENV PATH="${FLUCOMA_BIN_DIR}:$PATH"
 
 # Set up working directory
 WORKDIR /app

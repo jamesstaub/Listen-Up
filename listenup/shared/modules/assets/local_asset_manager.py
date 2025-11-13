@@ -14,13 +14,16 @@ class LocalAssetManager(AssetManager):
     """
     Manages assets on the local filesystem. Ideal for development and testing.
     """
-    def __init__(self, base_dir: str = "local_filestore"):
+    def __init__(self, base_dir: str | None = None):
         """
         Initializes the LocalAssetManager.
 
         Args:
-            base_dir (str): The root directory for storing assets.
+            base_dir (str): The root directory for storing assets. 
+                           If None, uses LOCAL_STORAGE_PATH environment variable or default.
         """
+        if base_dir is None:
+            base_dir = os.environ.get("LOCAL_STORAGE_PATH", "local_filestore")
         self.base_dir = os.path.abspath(base_dir)
         os.makedirs(self.base_dir, exist_ok=True)
         print(f"LocalAssetManager initialized. Files will be stored in: {self.base_dir}")

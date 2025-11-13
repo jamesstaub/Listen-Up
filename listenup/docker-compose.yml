@@ -36,6 +36,9 @@ services:
       - FLASK_ENV=development
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      # Storage configuration for development
+      - ASSET_STORAGE_PROVIDER=local
+      - LOCAL_STORAGE_PATH=/app/storage
     depends_on:
       - redis
       - mongodb
@@ -45,8 +48,8 @@ services:
       # Mount shared directories as volumes for live code updates
       - ./shared:/app/shared
       - ./backend:/app/backend
-      # Mount microservices shared separately to avoid path conflicts  
-      - ./microservices/shared:/app/microservices_shared
+      # Mount local storage directory for job artifacts
+      - ./storage:/app/storage
 
   flucoma_service:
     platform: linux/amd64  # Force x86-64 architecture for FluCoMa compatibility
@@ -57,6 +60,9 @@ services:
       - PYTHONPATH=/app
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      # Storage configuration for development
+      - ASSET_STORAGE_PROVIDER=local
+      - LOCAL_STORAGE_PATH=/app/storage
     depends_on:
       - redis
     working_dir: /app
@@ -64,8 +70,9 @@ services:
     volumes:
       # Mount shared directories as volumes for live code updates
       - ./shared:/app/shared  
-      - ./microservices/shared:/app/microservices_shared
       - ./microservices/flucoma_service:/app/microservices/flucoma_service
+      # Mount local storage directory for job artifacts
+      - ./storage:/app/storage
 
   librosa_service:
     build:
@@ -75,14 +82,18 @@ services:
       - PYTHONPATH=/app
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      # Storage configuration for development
+      - ASSET_STORAGE_PROVIDER=local
+      - LOCAL_STORAGE_PATH=/app/storage
     depends_on:
       - redis
-    command: ["python", "microservices/librosa_service/app.py"]
+    command: ["python", "/app/microservices/librosa_service/app.py"]
     volumes:
       # Mount shared directories as volumes for live code updates
       - ./shared:/app/shared
-      - ./microservices/shared:/app/microservices_shared  
       - ./microservices/librosa_service:/app/microservices/librosa_service
+      # Mount local storage directory for job artifacts
+      - ./storage:/app/storage
 
 volumes:
   pgdata:

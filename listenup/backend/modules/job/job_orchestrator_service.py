@@ -170,7 +170,7 @@ class JobOrchestratorService:
         job_id = event.get("job_id")
         step_id = event.get("step_id")
         status = event.get("status")
-        outputs = event.get("outputs", [])
+        outputs = event.get("outputs", {})
 
         if not job_id or not step_id or not status:
             print(f"❌ Invalid status event: missing required fields {job_id=} {step_id=} {status=}")

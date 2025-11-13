@@ -44,21 +44,14 @@ install-dev: venv
 	$(PIP) install -r requirements.txt
 	@echo "✅ All dependencies installed in virtual environment"
 
-# Setup development environment to mirror container structure
-# This creates symlinks so imports work the same in development as in Docker containers
-# 
-# Problem: In containers, microservices/shared is copied to /app/microservices_shared
-# Solution: Create symlink microservices_shared -> microservices/shared locally  
-# Result: import microservices_shared.modules.* works in both dev and containers
+# Setup development environment 
+# Note: With consolidated shared/ directory, no special setup needed
 setup-dev-env:
 	@echo "Setting up development environment..."
-	@# Create symlink to mirror Docker container structure for import resolution
-	@if [ ! -L microservices_shared ]; then \
-		ln -sf microservices/shared microservices_shared && \
-		echo "Created symlink: microservices_shared -> microservices/shared"; \
-	else \
-		echo "Symlink microservices_shared already exists"; \
-	fi
+	@mkdir -p storage
+	@echo "Created local storage directory: ./storage"
+	@echo "Development environment ready - using consolidated shared/ directory"
+	@echo "All imports use: from shared.modules.*"
 
 # === PRODUCTION-STYLE INSTALLATION ===
 # Install dependencies separately (useful for testing production deployment locally)
@@ -119,14 +112,10 @@ clean:
 	find . -name "*.pyo" -delete
 	find . -name ".pytest_cache" -type d -exec rm -rf {} +
 
-# Clean development environment (remove symlinks created by setup-dev-env)  
-# Use this if you need to reset the development environment or before switching branches
+# Clean development environment  
+# With consolidated shared/ directory, no cleanup needed
 clean-dev:
-	@echo "Cleaning development environment..."
-	@if [ -L microservices_shared ]; then \
-		rm microservices_shared && \
-		echo "Removed symlink: microservices_shared"; \
-	fi
+	@echo "Development environment clean - using consolidated shared/ directory"
 
 # Remove virtual environment completely
 clean-venv:

@@ -16,4 +16,4 @@ RUN pip install --no-cache-dir -r microservices/librosa_service/requirements.txt
 # Note: Source code will be mounted as volumes in docker-compose.yml
 # This allows for live code updates without rebuilding the container
 
-CMD ["python", "microservices/librosa_service/app.py"]
+# Command is specified in docker-compose.yml for flexibility

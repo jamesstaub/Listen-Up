@@ -115,7 +115,7 @@ class JobModel:
         job_id: str,
         step_id: str,
         status: JobStepState,
-        outputs: Optional[List[str]] = None,
+        outputs: Optional[Dict[str, Any]] = None,
         error_message: Optional[str] = None,
         clear_error: bool = False,
     ) -> None:

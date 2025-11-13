@@ -5,6 +5,28 @@
 
 set -e  # Exit on any error
 
+# Parse command line arguments
+SKIP_CLEANUP=false
+if [[ "$*" == *"--help"* ]]; then
+    echo "Usage: $0 [--no-cleanup] [--help]"
+    echo ""
+    echo "Options:"
+    echo "  --no-cleanup    Skip cleanup of test data (useful for debugging)"
+    echo "  --help         Show this help message"
+    echo ""
+    echo "This script tests the machine-listening job pipeline by:"
+    echo "  1. Creating test jobs via API"
+    echo "  2. Verifying data in MongoDB and Redis"
+    echo "  3. Testing job retrieval and retry functionality"
+    echo "  4. Automatically cleaning up test data (unless --no-cleanup)"
+    exit 0
+fi
+
+if [[ "$*" == *"--no-cleanup"* ]]; then
+    SKIP_CLEANUP=true
+    echo "🚫 Cleanup disabled via --no-cleanup flag"
+fi
+
 echo "🧪 Testing Machine Learning Job Pipeline"
 echo "========================================"
 
@@ -14,6 +36,10 @@ MONGO_HOST="localhost"
 MONGO_PORT="27017"
 REDIS_HOST="localhost"
 REDIS_PORT="6379"
+
+# Track created jobs for cleanup
+CREATED_JOBS=()
+TEMP_FILES=()
 
 # Colors for output
 RED='\033[0;31m'
@@ -36,6 +62,120 @@ print_error() {
 
 print_warning() {
     echo -e "${YELLOW}⚠️  $1${NC}"
+}
+
+# Cleanup functions
+cleanup_jobs() {
+    if [ ${#CREATED_JOBS[@]} -eq 0 ]; then
+        print_step "No jobs to clean up"
+        return
+    fi
+    
+    print_step "Cleaning up ${#CREATED_JOBS[@]} test job(s) from MongoDB..."
+    
+    for job_id in "${CREATED_JOBS[@]}"; do
+        if [ -n "$job_id" ] && [ "$job_id" != "null" ]; then
+            echo "  Removing job: $job_id"
+            MONGO_DELETE="db.jobs.deleteOne({\"_id\": \"$job_id\"})"
+            DELETE_RESULT=$(docker exec listenup-mongodb-1 mongosh --quiet listenup-mongo-db --eval "$MONGO_DELETE" 2>/dev/null || true)
+            
+            if echo "$DELETE_RESULT" | grep -q "deletedCount: 1"; then
+                echo "    ✅ Deleted job $job_id"
+            else
+                echo "    ⚠️  Could not delete job $job_id (may not exist)"
+            fi
+        fi
+    done
+}
+
+cleanup_temp_files() {
+    if [ ${#TEMP_FILES[@]} -eq 0 ]; then
+        return
+    fi
+    
+    print_step "Cleaning up ${#TEMP_FILES[@]} temporary file(s)..."
+    
+    for temp_file in "${TEMP_FILES[@]}"; do
+        if [ -f "$temp_file" ]; then
+            rm -f "$temp_file"
+            echo "  ✅ Removed $temp_file"
+        fi
+    done
+}
+
+cleanup_storage_files() {
+    print_step "Cleaning up test storage files..."
+    
+    # Clean up any test files that might have been created in storage
+    # Look for files with test job IDs in the name
+    for job_id in "${CREATED_JOBS[@]}"; do
+        if [ -n "$job_id" ] && [ "$job_id" != "null" ]; then
+            # Check if storage directory exists and clean up files related to this job
+            if [ -d "./storage" ]; then
+                find "./storage" -name "*${job_id}*" -type f 2>/dev/null | while read -r file; do
+                    if [ -f "$file" ]; then
+                        rm -f "$file"
+                        echo "  🗑️  Removed storage file: $file"
+                    fi
+                done
+            fi
+            
+            # Also clean up in Docker volume storage if accessible
+            docker exec listenup-backend-1 find /app/storage -name "*${job_id}*" -type f -delete 2>/dev/null || true
+        fi
+    done
+}
+
+cleanup_redis_queues() {
+    print_step "Cleaning up Redis test queues..."
+    
+    # Clean up any test-related Redis keys (be careful not to clear all)
+    # For now, just clear job_events queue if it has too many entries
+    REDIS_QUEUE_LENGTH=$(docker exec listenup-redis-1 redis-cli LLEN job_events 2>/dev/null || echo "0")
+    if [ "$REDIS_QUEUE_LENGTH" -gt 10 ]; then
+        print_warning "job_events queue has $REDIS_QUEUE_LENGTH items - consider manual cleanup"
+    fi
+}
+
+# Cleanup function to run on script exit
+cleanup_on_exit() {
+    echo ""
+    
+    if [ "$SKIP_CLEANUP" = true ]; then
+        print_warning "🚫 Cleanup skipped (--no-cleanup flag)"
+        echo "📝 Test jobs left in database for manual inspection:"
+        for job_id in "${CREATED_JOBS[@]}"; do
+            echo "   - $job_id"
+        done
+        echo "🧹 To clean up manually later, run:"
+        echo "   docker exec listenup-mongodb-1 mongosh listenup-mongo-db --eval 'db.jobs.deleteMany({\"_id\": {\$in: [$(printf '\"%s\",' "${CREATED_JOBS[@]}" | sed 's/,$//')]}})"
+        return
+    fi
+    
+    print_step "🧹 Running cleanup..."
+    cleanup_jobs
+    cleanup_temp_files
+    cleanup_storage_files
+    cleanup_redis_queues
+    print_success "Cleanup completed"
+}
+
+# Set up cleanup trap to run on script exit (success or failure)
+trap cleanup_on_exit EXIT
+
+add_job_to_cleanup() {
+    local job_id="$1"
+    if [ -n "$job_id" ] && [ "$job_id" != "null" ]; then
+        CREATED_JOBS+=("$job_id")
+        echo "  📝 Added $job_id to cleanup list"
+    fi
+}
+
+add_temp_file_to_cleanup() {
+    local temp_file="$1"
+    if [ -n "$temp_file" ]; then
+        TEMP_FILES+=("$temp_file")
+    fi
 }
 
 # Check if services are running
@@ -145,6 +285,7 @@ JOB_ID=$(echo "$RESPONSE" | jq -r '.job_id')
 
 if [ "$JOB_ID" != "null" ] && [ -n "$JOB_ID" ]; then
     print_success "Job created with ID: $JOB_ID"
+    add_job_to_cleanup "$JOB_ID"
 else
     print_error "Failed to create job"
     echo "Response: $RESPONSE"
@@ -167,6 +308,8 @@ else
     print_error "Job record NOT found in MongoDB"
     echo "Query result: $MONGO_RESULT"
 fi
+
+# TODO: check that the Job record matches expected structure
 
 echo ""
 
@@ -246,10 +389,10 @@ SIMPLE_JOB_PAYLOAD='{
                 }
             },
             "inputs": {
-                "input_audio": "s3://my-bucket/simple-test.wav"
+                "input_audio": "/app/storage/test_data/test.aiff"
             },
             "outputs": {
-                "output_features": "s3://my-bucket/outputs/simple-pitch.csv"
+                "output_features": "/app/storage/simple-pitch.csv"
             }
         }
     ],
@@ -265,6 +408,7 @@ SIMPLE_JOB_ID=$(echo "$SIMPLE_RESPONSE" | jq -r '.job_id')
 
 if [ "$SIMPLE_JOB_ID" != "null" ] && [ -n "$SIMPLE_JOB_ID" ]; then
     print_success "Simple job created with ID: $SIMPLE_JOB_ID"
+    add_job_to_cleanup "$SIMPLE_JOB_ID"
     
     echo "⏰ Waiting 3 seconds for job processing..."
     sleep 3
@@ -340,10 +484,19 @@ print_success "✅ End-to-end job processing and status verification works"
 echo ""
 echo "🎉 All tests completed!"
 echo ""
-echo "📝 Jobs created:"
-echo "   Multi-step job ID: $JOB_ID"
-if [ -n "$SIMPLE_JOB_ID" ]; then
-    echo "   Simple test job ID: $SIMPLE_JOB_ID"
-fi
+echo "📝 Test jobs created and tracked for cleanup:"
+for job_id in "${CREATED_JOBS[@]}"; do
+    echo "   - $job_id"
+done
+echo ""
 echo "🔍 You can test manually with:"
-echo "   curl $BACKEND_URL/jobs/$JOB_ID"
+if [ -n "$JOB_ID" ]; then
+    echo "   curl $BACKEND_URL/jobs/$JOB_ID"
+fi
+echo ""
+if [ "$SKIP_CLEANUP" = true ]; then
+    echo "🚫 Cleanup skipped - test data left in database for inspection"
+else
+    echo "🧹 Cleanup will run automatically when script exits"
+    echo "   To skip cleanup for debugging, use: $0 --no-cleanup"
+fi

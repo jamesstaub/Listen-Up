@@ -1,5 +1,5 @@
 import traceback
-from microservices_shared.modules.queue.command_executor_queue_service import CommandExecutorQueueService
+from shared.modules.queue.command_executor_queue_service import CommandExecutorQueueService
 
     
 SERVICE_NAME = "flucoma_service"
