@@ -23,9 +23,7 @@ def create_asset_manager() -> AssetManager:
     provider = os.environ.get("ASSET_STORAGE_PROVIDER", "local").lower()
     
     if provider == "s3":
-        bucket_name = os.environ.get("S3_BUCKET_NAME", "your-prod-bucket")
-        region = os.environ.get("S3_REGION", "us-east-1")
-        return S3AssetManager(bucket_name=bucket_name, region=region)
+        raise NotImplementedError("S3 asset manager not implemented yet")
     else:
         # Default to local for development
         return LocalAssetManager()

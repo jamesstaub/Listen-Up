@@ -10,11 +10,14 @@ from .step_transition import StepTransition
 
 class Job(BaseModel):
     job_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-
+    
+    # User context for storage management
+    user_id: Optional[str] = None
+    
     status: str = JobStatus.PENDING
     steps: List[JobStep] = Field(default_factory=list)
     step_transitions: List[StepTransition] = Field(default_factory=list)
-
+    
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 

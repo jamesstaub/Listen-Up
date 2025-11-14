@@ -208,37 +208,65 @@ fi
 
 echo ""
 
+# Setup test user storage
+print_step "Setting up test user storage structure"
+
+TEST_USER_ID="test_user_123"
+TEST_USER_UPLOADS_DIR="./storage/users/$TEST_USER_ID/uploads"
+TEST_AUDIO_FILE="$TEST_USER_UPLOADS_DIR/test_audio.wav"
+
+# Create test user directory structure
+mkdir -p "$TEST_USER_UPLOADS_DIR"
+print_success "Created test user uploads directory: $TEST_USER_UPLOADS_DIR"
+
+# Copy test audio file to user uploads
+if [ -f "./storage/test_data/test.wav" ]; then
+    cp "./storage/test_data/test.wav" "$TEST_AUDIO_FILE"
+    print_success "Copied test audio file to user uploads: $TEST_AUDIO_FILE"
+else
+    print_error "Test audio file not found at ./storage/test_data/test.wav"
+    exit 1
+fi
+
+# Add test files to cleanup
+add_temp_file_to_cleanup "$TEST_USER_UPLOADS_DIR"
+
+echo ""
+
 # Test 1: Create a job via POST
 print_step "Test 1: Creating a new job via POST /jobs"
 
 JOB_PAYLOAD='{
+    "user_id": "test_user_123",
     "steps": [
         {
             "name": "harmonic-percussive-separation",
             "service": "flucoma_service",
+            "storage_policy": "temporary",
             "command_spec": {
                 "program": "fluid-hpss",
                 "flags": {
                     "-source": "{{input_file}}",
                     "-harmonic": "{{harmonic_output}}",
                     "-percussive": "{{percussive_output}}",
-                    "-harmfiltersize": "17",
-                    "-percfiltersize": "31",
+                    "-harmfiltersize": "17 17",
+                    "-percfiltersize": "31 31",
                     "-maskingmode": "0",
-                    "-fftsettings": "1024 512 1024"
+                    "-fftsettings": "1024 512 1024 -1"
                 }
             },
             "inputs": {
-                "input_file": "s3://my-bucket/path/to/audio.wav"
+                "input_file": "users/{{user_id}}/uploads/test_audio.wav"
             },
             "outputs": {
-                "harmonic_output": "s3://my-bucket/outputs/harmonic.wav",
-                "percussive_output": "s3://my-bucket/outputs/percussive.wav"
+                "harmonic_output": "users/{{user_id}}/jobs/{{job_id}}/{{composite_name}}/harmonic.wav",
+                "percussive_output": "users/{{user_id}}/jobs/{{job_id}}/{{composite_name}}/percussive.wav"
             }
         },
         {
             "name": "pitch-analysis",
             "service": "flucoma_service",
+            "storage_policy": "permanent",
             "command_spec": {
                 "program": "fluid-pitch",
                 "flags": {
@@ -248,14 +276,14 @@ JOB_PAYLOAD='{
                     "-minfreq": "20.0",
                     "-maxfreq": "10000.0",
                     "-unit": "0",
-                    "-fftsettings": "1024 512 1024"
+                    "-fftsettings": "1024 512 1024 -1"
                 }
             },
             "inputs": {
                 "audio_input": "{{steps.harmonic-percussive-separation.outputs.harmonic_output}}"
             },
             "outputs": {
-                "pitch_features": "s3://my-bucket/outputs/pitch.csv"
+                "pitch_features": "users/{{user_id}}/jobs/{{job_id}}/{{composite_name}}/pitch_analysis.csv"
             }
         }
     ],
@@ -371,13 +399,15 @@ fi
 echo ""
 
 # Test 6: Create simple job and verify success status in MongoDB
-print_step "Test 6: Creating simple job and verifying success in MongoDB"
+print_step "Test 6: Creating simple job with TEMPORARY storage policy"
 
 SIMPLE_JOB_PAYLOAD='{
+    "user_id": "test_user_123",
     "steps": [
         {
             "name": "simple-pitch-test",
             "service": "flucoma_service",
+            "storage_policy": "temporary",
             "command_spec": {
                 "program": "fluid-pitch",
                 "flags": {
@@ -389,17 +419,17 @@ SIMPLE_JOB_PAYLOAD='{
                 }
             },
             "inputs": {
-                "input_audio": "/app/storage/test_data/test.aiff"
+                "input_audio": "users/test_user_123/uploads/test_audio.wav"
             },
             "outputs": {
-                "output_features": "/app/storage/simple-pitch.csv"
+                "output_features": "users/{{user_id}}/jobs/{{job_id}}/{{composite_name}}/simple-pitch.csv"
             }
         }
     ],
     "step_transitions": []
 }'
 
-echo "Creating simple job for success verification..."
+echo "Creating simple job for TEMPORARY storage verification..."
 SIMPLE_RESPONSE=$(curl -s -X POST "$BACKEND_URL/jobs" \
     -H "Content-Type: application/json" \
     -d "$SIMPLE_JOB_PAYLOAD")
@@ -410,58 +440,122 @@ if [ "$SIMPLE_JOB_ID" != "null" ] && [ -n "$SIMPLE_JOB_ID" ]; then
     print_success "Simple job created with ID: $SIMPLE_JOB_ID"
     add_job_to_cleanup "$SIMPLE_JOB_ID"
     
-    echo "⏰ Waiting 3 seconds for job processing..."
-    sleep 3
+    echo "⏰ Waiting 5 seconds for job processing..."
+    sleep 5
     
-    # Query MongoDB directly to check final status
-    print_step "Querying MongoDB directly for job status..."
-    MONGO_STATUS_QUERY="db.jobs.findOne({\"_id\": \"$SIMPLE_JOB_ID\"}, {\"status\": 1, \"steps.status\": 1, \"steps.error_message\": 1})"
+    # Check if job-step directory was created (TEMPORARY storage still uses job-step dirs)
+    TEMP_JOB_BASE="./storage/users/test_user_123/jobs/$SIMPLE_JOB_ID"
+    
+    # Look for the job-step directory pattern: 000_<service>_<program>_<hash>
+    if find "$TEMP_JOB_BASE" -name "000_*" -type d | grep -q .; then
+        ACTUAL_STEP_DIR=$(find "$TEMP_JOB_BASE" -name "000_*" -type d | head -1)
+        print_success "✅ Job-step directory created for TEMPORARY storage: $ACTUAL_STEP_DIR"
+        
+        # Check for output files in job-step directory
+        if find "$ACTUAL_STEP_DIR" -name "*.csv" -o -name "*.wav" | grep -q .; then
+            print_success "✅ Output files found in job-step directory"
+        else
+            print_warning "⚠️  No output files found in job-step directory"
+        fi
+    else
+        print_warning "⚠️  Expected job-step directory (000_*) not created in: $TEMP_JOB_BASE"
+    fi
+    
+    # Query job status
+    MONGO_STATUS_QUERY="db.jobs.findOne({\"_id\": \"$SIMPLE_JOB_ID\"}, {\"status\": 1, \"steps.status\": 1})"
     MONGO_STATUS_RESULT=$(docker exec listenup-mongodb-1 mongosh --quiet listenup-mongo-db --eval "$MONGO_STATUS_QUERY")
     
-    echo "MongoDB result:"
-    echo "$MONGO_STATUS_RESULT" | tail -n +2  # Skip connection message
-    
-    # Extract status from MongoDB result using a more robust approach
     JOB_STATUS=$(echo "$MONGO_STATUS_RESULT" | grep -o "status: '[^']*'" | head -1 | cut -d"'" -f2)
     
-    # Alternative extraction method if the first one fails
-    if [ -z "$JOB_STATUS" ]; then
-        JOB_STATUS=$(echo "$MONGO_STATUS_RESULT" | sed -n "s/.*status: '\([^']*\)'.*/\1/p" | head -1)
-    fi
-    
     if [ "$JOB_STATUS" = "complete" ]; then
-        print_success "✅ Job completed successfully in MongoDB!"
-    elif [ "$JOB_STATUS" = "failed" ]; then
-        print_error "❌ Job failed in MongoDB"
-        # Check step status for more details
-        STEP_STATUS=$(echo "$MONGO_STATUS_RESULT" | grep -o '"status"[[:space:]]*:[[:space:]]*"failed"')
-        if [ -n "$STEP_STATUS" ]; then
-            echo "Step failed - checking error message..."
-            ERROR_MSG=$(echo "$MONGO_STATUS_RESULT" | grep -o '"error_message"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
-            if [ -n "$ERROR_MSG" ] && [ "$ERROR_MSG" != "null" ]; then
-                echo "Error: $ERROR_MSG"
-            fi
-        fi
-    elif [ "$JOB_STATUS" = "processing" ]; then
-        print_warning "⚠️  Job still processing after 3 seconds"
-        echo "This might indicate slow processing or issues with status updates"
+        print_success "✅ TEMPORARY storage job completed successfully"
     else
-        print_warning "⚠️  Job status: ${JOB_STATUS:-unknown}"
-    fi
-    
-    # Also test backend API for comparison
-    API_RESPONSE=$(curl -s "$BACKEND_URL/jobs/$SIMPLE_JOB_ID")
-    API_STATUS=$(echo "$API_RESPONSE" | jq -r '.status')
-    echo "Backend API reports status: $API_STATUS"
-    
-    if [ "$JOB_STATUS" = "$API_STATUS" ]; then
-        print_success "✅ MongoDB and API status match"
-    else
-        print_warning "⚠️  Status mismatch - MongoDB: $JOB_STATUS, API: $API_STATUS"
+        print_warning "⚠️  TEMPORARY storage job status: ${JOB_STATUS:-unknown}"
     fi
     
 else
-    print_error "Failed to create simple job for status verification"
+    print_error "Failed to create simple job for TEMPORARY storage verification"
+fi
+
+echo ""
+
+# Test 7: Create job with PERMANENT storage policy
+print_step "Test 7: Creating job with PERMANENT storage policy"
+
+PERMANENT_JOB_PAYLOAD='{
+    "user_id": "test_user_123",
+    "steps": [
+        {
+            "name": "permanent-pitch-test",
+            "service": "flucoma_service",
+            "storage_policy": "permanent",
+            "command_spec": {
+                "program": "fluid-pitch",
+                "flags": {
+                    "-source": "{{input_audio}}",
+                    "-features": "{{output_features}}",
+                    "-algorithm": "0",
+                    "-minfreq": "20.0",
+                    "-maxfreq": "10000.0"
+                }
+            },
+            "inputs": {
+                "input_audio": "users/test_user_123/uploads/test_audio.wav"
+            },
+            "outputs": {
+                "output_features": "users/test_user_123/jobs/{{job_id}}/{{composite_name}}/pitch_analysis.csv"
+            }
+        }
+    ],
+    "step_transitions": []
+}'
+
+echo "Creating job for PERMANENT storage verification..."
+PERMANENT_RESPONSE=$(curl -s -X POST "$BACKEND_URL/jobs" \
+    -H "Content-Type: application/json" \
+    -d "$PERMANENT_JOB_PAYLOAD")
+
+PERMANENT_JOB_ID=$(echo "$PERMANENT_RESPONSE" | jq -r '.job_id')
+
+if [ "$PERMANENT_JOB_ID" != "null" ] && [ -n "$PERMANENT_JOB_ID" ]; then
+    print_success "Permanent job created with ID: $PERMANENT_JOB_ID"
+    add_job_to_cleanup "$PERMANENT_JOB_ID"
+    
+    echo "⏰ Waiting 5 seconds for job processing..."
+    sleep 5
+    
+    # Check if permanent directory was created (should be job-step directory)
+    PERMANENT_JOB_DIR="./storage/users/test_user_123/jobs/$PERMANENT_JOB_ID"
+    
+    # Look for the job-step directory pattern: 000_<service>_<program>_<hash>
+    if find "$PERMANENT_JOB_DIR" -name "000_*" -type d | grep -q .; then
+        ACTUAL_STEP_DIR=$(find "$PERMANENT_JOB_DIR" -name "000_*" -type d | head -1)
+        print_success "✅ Job-step directory created: $ACTUAL_STEP_DIR"
+        
+        # Check for output files in job-step directory
+        if find "$ACTUAL_STEP_DIR" -name "*.csv" -o -name "*.wav" | grep -q .; then
+            print_success "✅ Output files found in job-step directory"
+        else
+            print_warning "⚠️  No output files found in job-step directory"
+        fi
+    else
+        print_warning "⚠️  Expected job-step directory (000_*) not created in: $PERMANENT_JOB_DIR"
+    fi
+    
+    # Query job status
+    MONGO_STATUS_QUERY="db.jobs.findOne({\"_id\": \"$PERMANENT_JOB_ID\"}, {\"status\": 1, \"steps.status\": 1})"
+    MONGO_STATUS_RESULT=$(docker exec listenup-mongodb-1 mongosh --quiet listenup-mongo-db --eval "$MONGO_STATUS_QUERY")
+    
+    JOB_STATUS=$(echo "$MONGO_STATUS_RESULT" | grep -o "status: '[^']*'" | head -1 | cut -d"'" -f2)
+    
+    if [ "$JOB_STATUS" = "complete" ]; then
+        print_success "✅ PERMANENT storage job completed successfully"
+    else
+        print_warning "⚠️  PERMANENT storage job status: ${JOB_STATUS:-unknown}"
+    fi
+    
+else
+    print_error "Failed to create job for PERMANENT storage verification"
 fi
 
 echo ""

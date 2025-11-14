@@ -12,7 +12,7 @@ class JobStepStatusEvent(BaseModel):
     step_name: str
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     status: JobStepState
-    outputs: Dict[str, Any] = Field(default_factory=dict)  # Dict mapping output names to URIs
+    outputs: Optional[Dict[str, Any]] = Field(default_factory=dict)  # Dict mapping output names to URIs
     metrics: Dict[str, Any] = Field(default_factory=dict)
     error_message: Optional[str] = None
     

@@ -10,6 +10,12 @@ from shared.modules.job.models.job_step_status_event import JobStepStatusEvent
 from shared.modules.job.enums.job_step_state_enum import JobStepState
 from shared.modules.log.simple_logger import get_logger
 
+# Storage root configuration
+STORAGE_ROOT = os.getenv("STORAGE_ROOT", "/app/storage")
+
+# Get storage root from environment, default to Docker volume path
+STORAGE_ROOT = os.getenv("STORAGE_ROOT", "/app/storage")
+
 # TODO need to wrap certain commands in utility scripts such as NMF
 # which outputs a single multi-channel file. in teh client, the NMF "step" can be a macro
 # that also includes options for buffer management like number of channels, encoding etc.
@@ -211,71 +217,65 @@ class CommandExecutorQueueService:
 
     def _download_and_map_inputs(self, input_mapping: Dict[str, str], input_dir: str) -> Dict[str, str]:
         """
-        Download input files and create placeholder-to-local-path mapping.
+        Map input files to local paths, using shared storage directly when possible.
         
         Args:
-            input_mapping: Dict mapping placeholders to input URIs
-            input_dir: Directory to download files to
+            input_mapping: Dict mapping placeholders to relative storage paths
+            input_dir: Directory to download remote files to (unused for local storage)
             
         Returns:
-            Dict mapping placeholders to local file paths
+            Dict mapping placeholders to absolute file paths
         """
         local_mapping = {}
         
-        for placeholder, uri in input_mapping.items():
-            # Create local filename based on placeholder
-            filename = f"{placeholder.replace('{', '').replace('}', '').lower()}.wav"
-            local_path = os.path.join(input_dir, filename)
-            
-            # For now, assume local file paths for development/testing
-            if os.path.exists(uri):
-                import shutil
-                shutil.copy2(uri, local_path)
-                self.logger.info(f"📥 Downloaded {placeholder}: {uri} -> {local_path}")
+        for placeholder, relative_path in input_mapping.items():
+            # Convert relative path to absolute path within shared storage
+            if relative_path.startswith(STORAGE_ROOT):
+                # Already absolute path - use directly
+                absolute_path = relative_path
             else:
-                # For S3 or remote URIs, we'd implement download logic here
-                # For now, create a dummy audio file for testing
-                self.logger.warning(f"⚠️  Input file not found locally: {uri}")
-                
-                # Create a minimal WAV file (44-byte header + silence)
-                import struct
-                with open(local_path, 'wb') as f:
-                    # WAV header for 1 second of silence, 44100 Hz, mono, 16-bit
-                    sample_rate = 44100
-                    num_samples = sample_rate  # 1 second
-                    f.write(b'RIFF')
-                    f.write(struct.pack('<I', 36 + num_samples * 2))  # File size
-                    f.write(b'WAVE')
-                    f.write(b'fmt ')
-                    f.write(struct.pack('<I', 16))  # PCM format chunk size
-                    f.write(struct.pack('<HHIIHH', 1, 1, sample_rate, sample_rate * 2, 2, 16))
-                    f.write(b'data')
-                    f.write(struct.pack('<I', num_samples * 2))  # Data chunk size
-                    f.write(b'\x00' * (num_samples * 2))  # Silent audio data
-                
-                self.logger.info(f"📥 Created dummy WAV: {uri} -> {local_path}")
+                # Relative path - prepend storage root
+                absolute_path = os.path.join(STORAGE_ROOT, relative_path)
             
-            local_mapping[placeholder] = local_path
+            # Use the file directly from shared storage - no copying needed!
+            if os.path.exists(absolute_path):
+                local_mapping[placeholder] = absolute_path
+                self.logger.info(f"📂 Using shared storage file directly: {placeholder} -> {absolute_path}")
+            else:
+                # File doesn't exist - this is an error in the pipeline
+                self.logger.error(f"❌ Input file not found in shared storage: {absolute_path}")
+                raise FileNotFoundError(f"Input file not found: {absolute_path}")
         
         return local_mapping
 
     def _create_output_mapping(self, output_mapping: Dict[str, str], output_dir: str) -> Dict[str, str]:
         """
-        Create placeholder-to-local-path mapping for output files.
+        Create placeholder-to-absolute-path mapping for output files in shared storage.
         
         Args:
-            output_mapping: Dict mapping placeholders to output filenames
-            output_dir: Directory where output files will be created
+            output_mapping: Dict mapping placeholders to relative storage paths
+            output_dir: Temp directory (unused - we write directly to shared storage)
             
         Returns:
-            Dict mapping placeholders to local file paths
+            Dict mapping placeholders to absolute file paths in shared storage
         """
         local_mapping = {}
         
-        for placeholder, filename in output_mapping.items():
-            local_path = os.path.join(output_dir, filename)
-            local_mapping[placeholder] = local_path
-            self.logger.info(f"📤 Will create {placeholder}: {local_path}")
+        for placeholder, relative_path in output_mapping.items():
+            # Convert relative path to absolute path within shared storage
+            if relative_path.startswith(STORAGE_ROOT):
+                # Already absolute path - use directly
+                absolute_path = relative_path
+            else:
+                # Relative path - prepend storage root
+                absolute_path = os.path.join(STORAGE_ROOT, relative_path)
+            
+            # Ensure output directory exists
+            output_dir_path = os.path.dirname(absolute_path)
+            os.makedirs(output_dir_path, exist_ok=True)
+            
+            local_mapping[placeholder] = absolute_path
+            self.logger.info(f"📤 Will create {placeholder}: {absolute_path}")
         
         return local_mapping
 
@@ -297,8 +297,15 @@ class CommandExecutorQueueService:
                 # Split space-separated values into individual arguments
                 command_parts.extend(value.split())
             else:
-                # Single value
-                command_parts.append(str(value))
+                # Single value - convert relative paths to absolute if needed
+                str_value = str(value)
+                
+                # Convert relative storage paths to absolute using STORAGE_ROOT
+                if not str_value.startswith("/") and "/" in str_value:
+                    # This is a relative path - make it absolute
+                    str_value = os.path.join(STORAGE_ROOT, str_value)
+                
+                command_parts.append(str_value)
         
         # Add positional args
         command_parts.extend([str(arg) for arg in args])
@@ -331,33 +338,32 @@ class CommandExecutorQueueService:
 
     def _upload_output_files(self, output_mapping: Dict[str, str], step_id: str) -> Dict[str, str]:
         """
-        Upload output files and return their URIs mapped by output names.
+        Return relative storage paths for output files (already written to shared storage).
         
         Args:
-            output_mapping: Dict mapping placeholders to local file paths
-            step_id: Step ID for generating unique URIs
+            output_mapping: Dict mapping placeholders to absolute storage paths
+            step_id: Step ID (unused - paths already determined)
             
         Returns:
-            Dict mapping output names to their URIs
+            Dict mapping output names to relative storage paths
         """
-        output_uris = {}
+        output_paths = {}
         
-        for placeholder, local_path in output_mapping.items():
-            if not os.path.exists(local_path):
-                self.logger.warning(f"⚠️  Expected output file not found: {local_path}")
+        for placeholder, absolute_path in output_mapping.items():
+            if not os.path.exists(absolute_path):
+                self.logger.warning(f"⚠️  Expected output file not found: {absolute_path}")
                 continue
             
-            # For now, return local path as URI for development/testing
-            # In production, this would upload to S3 and return the S3 URI
-            uri = f"file://{local_path}"
+            # Convert absolute path to relative storage path
+            relative_path = absolute_path.replace(STORAGE_ROOT + "/", "")
             
             # Remove curly braces from placeholder to get clean output name
             output_name = placeholder.replace('{', '').replace('}', '')
-            output_uris[output_name] = uri
+            output_paths[output_name] = relative_path
             
-            self.logger.info(f"📤 Uploaded {placeholder}: {local_path} -> {uri}")
+            self.logger.info(f"📤 Output stored: {placeholder} -> {relative_path}")
         
-        return output_uris
+        return output_paths
         """
         Download input files to the input directory.
         
@@ -398,13 +404,20 @@ class CommandExecutorQueueService:
             JobStepState.FAILED: "JOB_STEP_FAILED"
         }
         
+        # Only include outputs for successful completion or when explicitly provided
+        # Don't clear outputs on failure or processing unless explicitly requested
+        event_outputs = outputs if outputs is not None else {}
+        if (status in [JobStepState.FAILED, JobStepState.PROCESSING]) and outputs is None:
+            # For failures and processing, don't send outputs at all to avoid clearing existing outputs
+            event_outputs = None
+        
         status_event = JobStepStatusEvent(
             event_type=event_type_map.get(status, "JOB_STEP_PROCESSING"),
             job_id=step_event.job_id,
             step_id=step_event.step_id,
             step_name=step_event.step_name,
             status=status,
-            outputs=outputs or {},
+            outputs=event_outputs,
             error_message=message if status == JobStepState.FAILED else None
         )
         

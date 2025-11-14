@@ -39,6 +39,7 @@ services:
       # Storage configuration for development
       - ASSET_STORAGE_PROVIDER=local
       - LOCAL_STORAGE_PATH=/app/storage
+      - STORAGE_ROOT=/app/storage
     depends_on:
       - redis
       - mongodb
@@ -63,6 +64,7 @@ services:
       # Storage configuration for development
       - ASSET_STORAGE_PROVIDER=local
       - LOCAL_STORAGE_PATH=/app/storage
+      - STORAGE_ROOT=/app/storage
     depends_on:
       - redis
     working_dir: /app
@@ -85,6 +87,7 @@ services:
       # Storage configuration for development
       - ASSET_STORAGE_PROVIDER=local
       - LOCAL_STORAGE_PATH=/app/storage
+      - STORAGE_ROOT=/app/storage
     depends_on:
       - redis
     command: ["python", "/app/microservices/librosa_service/app.py"]

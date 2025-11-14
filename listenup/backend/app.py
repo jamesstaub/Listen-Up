@@ -16,6 +16,9 @@ mongo = PyMongo(app)
 from backend.api.job_controller import bp as job_controller_bp
 app.register_blueprint(job_controller_bp)
 
+from backend.api.user_assets_controller import bp as user_assets_bp
+app.register_blueprint(user_assets_bp)
+
 from backend.modules.job.backend_queue_service import BackendQueueService
 
 # Global variable to ensure we only start the queue listener once
