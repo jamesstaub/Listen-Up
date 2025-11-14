@@ -1,4 +1,4 @@
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Union
 from pydantic import BaseModel, Field
 
 class CommandSpec(BaseModel):
@@ -8,12 +8,12 @@ class CommandSpec(BaseModel):
     Example:
         cmd = CommandSpec(
             program="ffmpeg",
-            flags={"-i": "input.wav", "-ar": "44100", "-ac": "2"},
+            flags={"-i": "input.wav", "-ar": 44100, "-ac": 2},
             args=["output.wav"]
         )
     """
     program: str = Field(..., description="Base command or executable name")
-    flags: Dict[str, str] = Field(default_factory=dict, description="CLI flags e.g. {'-i': 'input.wav'}")
+    flags: Dict[str, Union[str, int, float, bool]] = Field(default_factory=dict, description="CLI flags e.g. {'-i': 'input.wav', '-ar': 44100}")
     args: List[str] = Field(default_factory=list, description="Ordered positional args")
     shell: bool = False
     cwd: Optional[str] = None

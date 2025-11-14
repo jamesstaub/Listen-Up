@@ -62,7 +62,7 @@ class JobEventFactory:
             payload={
                 "current_step": step.name,
                 "step_index": job.current_step_index,
-                "step_state": step.state,
+                "step_status": step.status,
                 "step_outputs": step.outputs,
             },
         )

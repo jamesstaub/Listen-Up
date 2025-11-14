@@ -5,7 +5,7 @@ from typing import Any, Dict
 from shared.modules.queue.redis_client import RedisQueueClient
 from shared.modules.job.models.job_step_event import JobStepEvent
 from shared.modules.job.models.job_step_status_event import JobStepStatusEvent
-from shared.modules.job.enums.job_step_state_enum import JobStepState
+from shared.modules.job.enums.job_step_status_enum import JobStepStatus
 from shared.modules.log.simple_logger import get_logger
 
 # DEPRECATED
@@ -59,7 +59,7 @@ class MicroserviceQueueService:
             self.logger.info(f"🔄 Processing step: {step_event.step_id} | Operation: {step_event.operation}")
             
             # Send "processing" status
-            self._send_status_update(step_event, JobStepState.PROCESSING, "Step started")
+            self._send_status_update(step_event, JobStepStatus.PROCESSING, "Step started")
 
             # Validate operation with manifest
             if not self.manifest.validate_operation(step_event.operation):
@@ -109,7 +109,7 @@ class MicroserviceQueueService:
                 self.logger.info(f"📤 Uploaded {len(output_uris)} output files")
                 
                 # Send "completed" status with outputs
-                self._send_status_update(step_event, JobStepState.COMPLETE, "Step completed successfully", output_uris)
+                self._send_status_update(step_event, JobStepStatus.COMPLETE, "Step completed successfully", output_uris)
 
             finally:
                 # Always cleanup temporary files
@@ -118,17 +118,17 @@ class MicroserviceQueueService:
         except Exception as e:
             self.logger.error(f"❌ Error processing step message: {e}")
             if step_event:
-                self._send_status_update(step_event, JobStepState.FAILED, str(e))
+                self._send_status_update(step_event, JobStepStatus.FAILED, str(e))
             else:
                 self.logger.error(f"❌ Failed to parse step event from message")
 
-    def _send_status_update(self, step_event: JobStepEvent, status: JobStepState, message: str, outputs=None):
+    def _send_status_update(self, step_event: JobStepEvent, status: JobStepStatus, message: str, outputs=None):
         """Send status update back to orchestrator."""
         try:
             # Determine event_type based on status
-            if status == JobStepState.COMPLETE:
+            if status == JobStepStatus.COMPLETE:
                 event_type = "JOB_STEP_COMPLETE"
-            elif status == JobStepState.FAILED:
+            elif status == JobStepStatus.FAILED:
                 event_type = "JOB_STEP_FAILED"
             else:
                 event_type = "JOB_STEP_UPDATE"
@@ -140,7 +140,7 @@ class MicroserviceQueueService:
                 step_name=step_event.step_name,
                 status=status,
                 outputs=outputs or {},
-                error_message=message if status == JobStepState.FAILED else None
+                error_message=message if status == JobStepStatus.FAILED else None
             )
             
             # Send to orchestrator queue

@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 from shared.modules.queue.redis_client import RedisQueueClient
 from shared.modules.job.models.job_step_event import JobStepEvent
 from shared.modules.job.models.job_step_status_event import JobStepStatusEvent
-from shared.modules.job.enums.job_step_state_enum import JobStepState
+from shared.modules.job.enums.job_step_status_enum import JobStepStatus
 from shared.modules.log.simple_logger import get_logger
 
 # Storage root configuration
@@ -79,7 +79,7 @@ class CommandExecutorQueueService:
             self.logger.info(f"🔍 Step event attributes: {list(step_event.__dict__.keys())}")
             
             # Send "processing" status
-            self._send_status_update(step_event, JobStepState.PROCESSING, "Processing step with file mapping")
+            self._send_status_update(step_event, JobStepStatus.PROCESSING, "Processing step with file mapping")
 
             # Create temporary directories
             temp_dir = tempfile.mkdtemp(prefix=f"{self.service_name}_{step_event.step_id}_")
@@ -104,16 +104,12 @@ class CommandExecutorQueueService:
             )
             self.logger.info(f"🗂️ Output mapping created: {local_output_mapping}")
             
-            # Build command from resolved command_spec and substitute local file paths
+            # Build command from resolved command_spec  
             self.logger.info(f"🔍 Building command from resolved spec: {step_event.command_spec}")
-            command_from_spec = self._build_command_from_spec(step_event.command_spec)
-            self.logger.info(f"🔧 Built command: {command_from_spec}")
-            final_command = self._substitute_file_paths(
-                command_from_spec,
-                local_input_mapping,
-                local_output_mapping
-            )
+            final_command = self._build_command_from_spec(step_event.command_spec)
+            self.logger.info(f"🔧 Built command: {final_command}")
             
+            # No need for placeholder substitution since paths are already resolved by the backend
             self.logger.info(f"🔧 Final command: {final_command}")
             
             # Execute the command with substituted file paths
@@ -128,7 +124,7 @@ class CommandExecutorQueueService:
             # Send success status
             self._send_status_update(
                 step_event, 
-                JobStepState.COMPLETE, 
+                JobStepStatus.COMPLETE, 
                 f"Command executed successfully", 
                 outputs=output_uris
             )
@@ -140,7 +136,7 @@ class CommandExecutorQueueService:
             self.logger.error(f"Full traceback: {traceback.format_exc()}")
             
             if step_event:
-                self._send_status_update(step_event, JobStepState.FAILED, error_msg)
+                self._send_status_update(step_event, JobStepStatus.FAILED, error_msg)
                 
         finally:
             # Clean up temporary directory
@@ -280,7 +276,7 @@ class CommandExecutorQueueService:
         return local_mapping
 
     def _build_command_from_spec(self, command_spec: Dict[str, Any]) -> str:
-        """Build a command string from a resolved CommandSpec dictionary."""
+        """Build a command string from a fully resolved CommandSpec dictionary with absolute paths."""
         program = command_spec.get("program", "")
         flags = command_spec.get("flags", {})
         args = command_spec.get("args", [])
@@ -297,44 +293,14 @@ class CommandExecutorQueueService:
                 # Split space-separated values into individual arguments
                 command_parts.extend(value.split())
             else:
-                # Single value - convert relative paths to absolute if needed
-                str_value = str(value)
-                
-                # Convert relative storage paths to absolute using STORAGE_ROOT
-                if not str_value.startswith("/") and "/" in str_value:
-                    # This is a relative path - make it absolute
-                    str_value = os.path.join(STORAGE_ROOT, str_value)
-                
-                command_parts.append(str_value)
+                # Convert value to string - handles int, float, bool, str
+                # This allows the CLI to receive proper typed values from the command line
+                command_parts.append(str(value))
         
         # Add positional args
         command_parts.extend([str(arg) for arg in args])
         
         return " ".join(command_parts)
-
-    def _substitute_file_paths(self, command_template: str, input_mapping: Dict[str, str], output_mapping: Dict[str, str]) -> str:
-        """
-        Substitute placeholders in command template with actual file paths.
-        
-        Args:
-            command_template: Command template with placeholders
-            input_mapping: Placeholder-to-local-path mapping for inputs
-            output_mapping: Placeholder-to-local-path mapping for outputs
-            
-        Returns:
-            Final command with substituted file paths
-        """
-        final_command = command_template
-        
-        # Substitute input placeholders
-        for placeholder, local_path in input_mapping.items():
-            final_command = final_command.replace(placeholder, local_path)
-            
-        # Substitute output placeholders  
-        for placeholder, local_path in output_mapping.items():
-            final_command = final_command.replace(placeholder, local_path)
-            
-        return final_command
 
     def _upload_output_files(self, output_mapping: Dict[str, str], step_id: str) -> Dict[str, str]:
         """
@@ -364,50 +330,19 @@ class CommandExecutorQueueService:
             self.logger.info(f"📤 Output stored: {placeholder} -> {relative_path}")
         
         return output_paths
-        """
-        Download input files to the input directory.
-        
-        Args:
-            input_uris: List of input file URIs
-            input_dir: Directory to download files to
-            
-        Returns:
-            List of local file paths
-        """
-        local_paths = []
-        
-        for i, uri in enumerate(input_uris):
-            # Create predictable local filename
-            filename = f"input_{i}.wav"
-            local_path = os.path.join(input_dir, filename)
-            
-            # For now, assume local file paths for development/testing
-            if os.path.exists(uri):
-                import shutil
-                shutil.copy2(uri, local_path)
-            else:
-                # For S3 or remote URIs, we'd need to implement download logic here
-                # For now, create a dummy file for testing
-                self.logger.warning(f"⚠️  Input file not found locally: {uri}")
-                # Create an empty file so the command doesn't fail immediately
-                with open(local_path, 'w') as f:
-                    f.write("dummy audio data")
-            
-            local_paths.append(local_path)
-            self.logger.info(f"📥 Downloaded {uri} -> {local_path}")
-        
-    def _send_status_update(self, step_event: JobStepEvent, status: JobStepState, message: str, outputs: Optional[Dict[str, str]] = None):
+
+    def _send_status_update(self, step_event: JobStepEvent, status: JobStepStatus, message: str, outputs: Optional[Dict[str, str]] = None):
         """Send a status update back to the orchestrator."""
         event_type_map = {
-            JobStepState.PROCESSING: "JOB_STEP_PROCESSING",
-            JobStepState.COMPLETE: "JOB_STEP_COMPLETE", 
-            JobStepState.FAILED: "JOB_STEP_FAILED"
+            JobStepStatus.PROCESSING: "JOB_STEP_PROCESSING",
+            JobStepStatus.COMPLETE: "JOB_STEP_COMPLETE", 
+            JobStepStatus.FAILED: "JOB_STEP_FAILED"
         }
         
         # Only include outputs for successful completion or when explicitly provided
         # Don't clear outputs on failure or processing unless explicitly requested
         event_outputs = outputs if outputs is not None else {}
-        if (status in [JobStepState.FAILED, JobStepState.PROCESSING]) and outputs is None:
+        if (status in [JobStepStatus.FAILED, JobStepStatus.PROCESSING]) and outputs is None:
             # For failures and processing, don't send outputs at all to avoid clearing existing outputs
             event_outputs = None
         
@@ -418,7 +353,7 @@ class CommandExecutorQueueService:
             step_name=step_event.step_name,
             status=status,
             outputs=event_outputs,
-            error_message=message if status == JobStepState.FAILED else None
+            error_message=message if status == JobStepStatus.FAILED else None
         )
         
         # Send to job status events queue

@@ -1,6 +1,6 @@
 from enum import Enum
 
-class JobStepState(str, Enum):
+class JobStepStatus(str, Enum):
     PENDING = "pending"
     PROCESSING = "processing"
     INITIALIZING = "initializing"

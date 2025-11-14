@@ -1,6 +1,6 @@
 from enum import Enum
 from typing import Any, Dict, Optional, List
-from shared.modules.job.enums.job_step_state_enum import JobStepState
+from shared.modules.job.enums.job_step_status_enum import JobStepStatus
 from pydantic import BaseModel, Field
 from datetime import datetime
 
@@ -11,7 +11,7 @@ class JobStepStatusEvent(BaseModel):
     step_id: str
     step_name: str
     timestamp: datetime = Field(default_factory=datetime.utcnow)
-    status: JobStepState
+    status: JobStepStatus
     outputs: Optional[Dict[str, Any]] = Field(default_factory=dict)  # Dict mapping output names to URIs
     metrics: Dict[str, Any] = Field(default_factory=dict)
     error_message: Optional[str] = None

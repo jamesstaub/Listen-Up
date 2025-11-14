@@ -558,6 +558,183 @@ else
     print_error "Failed to create job for PERMANENT storage verification"
 fi
 
+# Test 8: Complex multi-step job - NMF decomposition followed by MFCC analysis on each component
+print_step "Test 8: Creating complex multi-step job (NMF → 3x MFCC)"
+echo "Creating NMF decomposition job with 3 MFCC analysis steps..."
+
+COMPLEX_JOB_RESPONSE=$(curl -s -X POST "$BACKEND_URL/jobs" \
+    -H "Content-Type: application/json" \
+    -d '{
+        "user_id": "test_user_123",
+        "steps": [
+            {
+                "name": "nmf-decomposition",
+                "service": "flucoma_service",
+                "storage_policy": "permanent",
+                "command_spec": {
+                    "program": "fluid-nmf",
+                    "flags": {
+                        "-source": "{{input_audio}}",
+                        "-resynth": "{{nmf_components}}",
+                        "-resynthmode": 1,
+                        "-components": 3,
+                        "-iterations": 50,
+                        "-fftsettings": "1024 512 1024 -1"
+                    }
+                },
+                "inputs": {
+                    "input_audio": "users/{{user_id}}/uploads/test_audio.wav"
+                },
+                "outputs": {
+                    "nmf_components": "users/{{user_id}}/jobs/{{job_id}}/{{composite_name}}/nmf_components.wav"
+                }
+            },
+            {
+                "name": "mfcc-component-0",
+                "service": "flucoma_service", 
+                "storage_policy": "permanent",
+                "command_spec": {
+                    "program": "fluid-mfcc",
+                    "flags": {
+                        "-source": "{{nmf_input}}",
+                        "-features": "{{mfcc_features}}",
+                        "-startchan": 2,
+                        "-numchans": 1, 
+                        "-numcoeffs": "13 -1",
+                        "-fftsettings": "1024 512 1024 -1"
+                    }
+                },
+                "inputs": {
+                    "nmf_input": "{{steps.nmf-decomposition.outputs.nmf_components}}"
+                },
+                "outputs": {
+                    "mfcc_features": "users/{{user_id}}/jobs/{{job_id}}/{{composite_name}}/mfcc_component_0.csv"
+                }
+            },
+            {
+                "name": "mfcc-component-1",
+                "service": "flucoma_service",
+                "storage_policy": "permanent", 
+                "command_spec": {
+                    "program": "fluid-mfcc",
+                    "flags": {
+                        "-source": "{{nmf_input}}",
+                        "-features": "{{mfcc_features}}",
+                        "-startchan": 0,
+                        "-numchans": 1,
+                        "-numcoeffs": "13 -1",
+                        "-fftsettings": "1024 512 1024 -1"
+                    }
+                },
+                "inputs": {
+                    "nmf_input": "{{steps.nmf-decomposition.outputs.nmf_components}}"
+                },
+                "outputs": {
+                    "mfcc_features": "users/{{user_id}}/jobs/{{job_id}}/{{composite_name}}/mfcc_component_1.csv"
+                }
+            },
+            {
+                "name": "mfcc-component-2",
+                "service": "flucoma_service",
+                "storage_policy": "permanent",
+                "command_spec": {
+                    "program": "fluid-mfcc", 
+                    "flags": {
+                        "-source": "{{nmf_input}}",
+                        "-features": "{{mfcc_features}}",
+                        "-startchan": 1, 
+                        "-numchans": 1,
+                        "-numcoeffs": "13 -1",
+                        "-fftsettings": "1024 512 1024 -1"
+                    }
+                },
+                "inputs": {
+                    "nmf_input": "{{steps.nmf-decomposition.outputs.nmf_components}}"
+                },
+                "outputs": {
+                    "mfcc_features": "users/{{user_id}}/jobs/{{job_id}}/{{composite_name}}/mfcc_component_2.csv"
+                }
+            }
+        ],
+        "step_transitions": [
+            {
+                "from_step_name": "nmf-decomposition",
+                "to_step_name": "mfcc-component-0",
+                "output_to_input_mapping": {
+                    "nmf_components": "nmf_input"
+                }
+            },
+            {
+                "from_step_name": "nmf-decomposition", 
+                "to_step_name": "mfcc-component-1",
+                "output_to_input_mapping": {
+                    "nmf_components": "nmf_input"
+                }
+            },
+            {
+                "from_step_name": "nmf-decomposition",
+                "to_step_name": "mfcc-component-2", 
+                "output_to_input_mapping": {
+                    "nmf_components": "nmf_input"
+                }
+            }
+        ]
+    }')
+
+if echo "$COMPLEX_JOB_RESPONSE" | jq -e '.job_id' > /dev/null 2>&1; then
+    COMPLEX_JOB_ID=$(echo "$COMPLEX_JOB_RESPONSE" | jq -r '.job_id')
+    print_success "✅ Complex job created with ID: $COMPLEX_JOB_ID"
+    CREATED_JOBS+=("$COMPLEX_JOB_ID")
+    echo "  📝 Added $COMPLEX_JOB_ID to cleanup list"
+    
+    echo "⏰ Waiting 3 seconds for complex job processing..."
+    sleep 3
+    
+    # Check if job completed and verify output files
+    COMPLEX_JOB_DIR="./storage/users/test_user_123/jobs/$COMPLEX_JOB_ID"
+    if [ -d "$COMPLEX_JOB_DIR" ]; then
+        print_success "✅ Complex job directory created: $COMPLEX_JOB_DIR"
+        
+        # Count job-step directories (should be 4: 1 NMF + 3 MFCC)
+        STEP_DIRS=$(find "$COMPLEX_JOB_DIR" -maxdepth 1 -type d -name "*_*" | wc -l | tr -d ' ')
+        echo "📁 Found $STEP_DIRS job-step directories"
+        
+        # Check for NMF output (multichannel wav file)
+        NMF_OUTPUT=$(find "$COMPLEX_JOB_DIR" -name "nmf_components.wav" | head -1)
+        if [ -n "$NMF_OUTPUT" ] && [ -f "$NMF_OUTPUT" ]; then
+            print_success "✅ NMF components file created: $(basename "$NMF_OUTPUT")"
+        else
+            print_warning "⚠️  NMF components file not found"
+        fi
+        
+        # Check for MFCC outputs
+        MFCC_COUNT=$(find "$COMPLEX_JOB_DIR" -name "mfcc_component_*.csv" | wc -l | tr -d ' ')
+        if [ "$MFCC_COUNT" -eq 3 ]; then
+            print_success "✅ All 3 MFCC analysis files created"
+        else
+            print_warning "⚠️  Expected 3 MFCC files, found $MFCC_COUNT"
+        fi
+        
+        # Check final job status
+        COMPLEX_STATUS_QUERY="db.jobs.findOne({\"_id\": \"$COMPLEX_JOB_ID\"}, {\"status\": 1})"
+        COMPLEX_STATUS_RESULT=$(docker exec listenup-mongodb-1 mongosh --quiet listenup-mongo-db --eval "$COMPLEX_STATUS_QUERY")
+        COMPLEX_STATUS=$(echo "$COMPLEX_STATUS_RESULT" | grep -o "status: '[^']*'" | cut -d"'" -f2)
+        
+        if [ "$COMPLEX_STATUS" = "complete" ]; then
+            print_success "✅ Complex multi-step job completed successfully"
+        else
+            print_warning "⚠️  Complex job status: ${COMPLEX_STATUS:-unknown}"
+        fi
+        
+    else
+        print_warning "⚠️  Complex job directory not found: $COMPLEX_JOB_DIR"
+    fi
+    
+else
+    print_error "Failed to create complex multi-step job"
+    echo "Response: $COMPLEX_JOB_RESPONSE"
+fi
+
 echo ""
 
 # Summary

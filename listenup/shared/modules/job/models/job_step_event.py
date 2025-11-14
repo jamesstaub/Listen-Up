@@ -62,6 +62,7 @@ class JobStepEvent(BaseModel):
     def _resolve_template_variables(self, value: str, user_id: Optional[str] = None) -> str:
         """
         Resolve job-level template variables like {{job_id}}, {{user_id}}, {{step_id}}, and {{composite_name}}.
+        Convert relative storage paths to absolute paths.
         """
         if not isinstance(value, str):
             return value
@@ -79,5 +80,11 @@ class JobStepEvent(BaseModel):
         # Replace user_id template variable if provided
         if user_id:
             value = value.replace("{{user_id}}", user_id)
+        
+        # Convert relative storage paths to absolute paths
+        if "/" in value and not value.startswith("/"):
+            import os
+            storage_root = os.getenv("STORAGE_ROOT", "/app/storage")
+            value = os.path.join(storage_root, value)
         
         return value

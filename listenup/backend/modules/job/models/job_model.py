@@ -5,7 +5,7 @@ from pymongo.collection import Collection
 from shared.modules.job.models.job import Job
 from shared.modules.job.models.job_step import JobStep
 from shared.modules.job.enums.job_status_enum import JobStatus
-from shared.modules.job.enums.job_step_state_enum import JobStepState
+from shared.modules.job.enums.job_step_status_enum import JobStepStatus
 
 
 class JobModel:
@@ -114,7 +114,7 @@ class JobModel:
         self,
         job_id: str,
         step_id: str,
-        status: JobStepState,
+        status: JobStepStatus,
         outputs: Optional[Dict[str, Any]] = None,
         error_message: Optional[str] = None,
         clear_error: bool = False,
