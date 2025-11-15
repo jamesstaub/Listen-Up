@@ -1,7 +1,8 @@
 from pydantic import BaseModel
 from typing import Dict, Any, Optional
 from shared.modules.job.models.command_spec import CommandSpec
-from shared.modules.job.command_resolver import CommandResolver
+from shared.modules.job.services.command_resolver import CommandResolver
+from shared.modules.job.services.path_template_resolver import PathTemplateResolver
 
 
 class JobStepEvent(BaseModel):
@@ -67,24 +68,30 @@ class JobStepEvent(BaseModel):
         if not isinstance(value, str):
             return value
         
-        # Replace job_id template variable
-        value = value.replace("{{job_id}}", self.job_id)
+        # Use PathTemplateResolver for basic template resolution
+        path_resolver = PathTemplateResolver()
         
-        # Replace step_id template variable
-        value = value.replace("{{step_id}}", self.step_id)
+        # Create minimal objects for PathTemplateResolver
+        from types import SimpleNamespace
         
-        # Replace composite_name template variable if available
-        if self.composite_name:
-            value = value.replace("{{composite_name}}", self.composite_name)
+        # Create a simple job object with the necessary attributes
+        job_obj = SimpleNamespace()
+        job_obj.job_id = self.job_id
+        job_obj.user_id = user_id
+        job_obj.steps = []  # Not needed for basic template resolution
         
-        # Replace user_id template variable if provided
-        if user_id:
-            value = value.replace("{{user_id}}", user_id)
+        # Create a simple step object with the necessary attributes  
+        step_obj = SimpleNamespace()
+        step_obj.step_id = self.step_id
+        step_obj.get_composite_name = lambda: self.composite_name or self.step_id
+        
+        # Use PathTemplateResolver for basic template variable resolution
+        resolved_value = path_resolver.resolve(value, job=job_obj, step=step_obj)
         
         # Convert relative storage paths to absolute paths
-        if "/" in value and not value.startswith("/"):
+        if "/" in resolved_value and not resolved_value.startswith("/"):
             import os
             storage_root = os.getenv("STORAGE_ROOT", "/app/storage")
-            value = os.path.join(storage_root, value)
+            resolved_value = os.path.join(storage_root, resolved_value)
         
-        return value
+        return resolved_value

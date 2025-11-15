@@ -1,7 +1,7 @@
 from shared.modules.queue.queue_service import QueueService
 from shared.modules.queue.redis_client import RedisQueueClient
 from shared.modules.job.models.job_step_status_event import JobStepStatusEvent
-from backend.modules.job.job_orchestrator_service import JobOrchestratorService
+from backend.factories.service_factory import ServiceFactory
 from typing import Dict, Any
 import json
 import time
@@ -22,11 +22,12 @@ class BackendQueueService(QueueService):
     All business logic is delegated to JobOrchestratorService.
     """
     
-    def __init__(self, mongo_db):
+    def __init__(self):
         # Create Redis client for listening to status events FROM microservices
         redis_client = RedisQueueClient(queue_name="job_status_events")
         super().__init__(queue_client=redis_client)
-        self.orchestrator = JobOrchestratorService(mongo_db)
+        # Use factory - it will automatically get database from Flask application context
+        self.orchestrator = ServiceFactory.create_job_orchestrator()
 
     def run(self):
         """

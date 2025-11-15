@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify, current_app
-from backend.modules.job.job_orchestrator_service import JobOrchestratorService
+from backend.factories.service_factory import ServiceFactory
 
 bp = Blueprint("job_controller", __name__)
 
@@ -67,11 +67,12 @@ def create_job():
         # Basic request validation
         if not steps_data or not isinstance(steps_data, list):
             return jsonify({"error": "Invalid or missing 'steps' field"}), 400
-        # Get MongoDB instance from Flask app context
-        from backend.app import mongo
         
-        # Create orchestrator service and delegate all business logic
-        orchestrator = JobOrchestratorService(mongo.db)
+        # Extract user_id from request if available (for future user-specific storage)
+        user_id = payload.get("user_id")  # Could also come from session/auth
+        
+        # Create orchestrator service using factory with user context
+        orchestrator = ServiceFactory.create_job_orchestrator(user_id)
         # Pass the full payload to support step_transitions
         result = orchestrator.create_job(payload)
         return jsonify(result), 201
@@ -90,11 +91,9 @@ def get_job(job_id):
     Fetch job details from MongoDB.
     """
     try:
-        # Get MongoDB instance from Flask app context
-        from backend.app import mongo
-        
-        # Create orchestrator service and delegate business logic
-        orchestrator = JobOrchestratorService(mongo.db)
+        # Create orchestrator service using factory
+        orchestrator = ServiceFactory.create_job_orchestrator()
+        # FIXME: move get_job out of orchestrator, avoid factory construictor here
         job = orchestrator.get_job(job_id)
         
         if not job:
@@ -112,11 +111,8 @@ def retry_job(job_id):
     Retry a failed or incomplete job from the first non-complete step.
     """
     try:
-        # Get MongoDB instance from Flask app context
-        from backend.app import mongo
-        
-        # Create orchestrator service and delegate retry logic
-        orchestrator = JobOrchestratorService(mongo.db)
+        # Create orchestrator service using factory
+        orchestrator = ServiceFactory.create_job_orchestrator()
         result = orchestrator.retry_job(job_id)
         
         return jsonify(result), 200

@@ -1,19 +1,20 @@
+
+from shared.modules.storage.backends.LocalFilesystemBackend import LocalFilesystemBackend
+from shared.modules.storage.backends.StorageBackend import StorageBackend
+from shared.modules.storage.storage_manager import StorageManager
 from shared.modules.job.models.step_transition import StepTransition
 from shared.modules.job.models.command_spec import CommandSpec
 from shared.modules.job.models.job import Job, JobStatus, JobStep
 from shared.modules.job.enums.job_step_status_enum import JobStepStatus
 from shared.modules.job.models.job_step_event import JobStepEvent
-from shared.modules.job.command_resolver import CommandResolver
+from shared.modules.job.services.command_resolver import CommandResolver
 from shared.modules.queue.redis_client import RedisQueueClient
 from backend.modules.job.models.job_model import JobModel
+
 from typing import Dict, Any
 import uuid
 import os
 from datetime import datetime
-
-# Environment-configurable storage root
-STORAGE_ROOT = os.getenv("STORAGE_ROOT", "/app/storage")
-
 
 class JobOrchestratorService:
     """
@@ -21,10 +22,12 @@ class JobOrchestratorService:
     Dispatches steps to microservices and listens for completion events.
     """
 
-    def __init__(self, mongo_db):
+    def __init__(self, mongo_db, storage: StorageManager, job_step_storage_service):
         self.job_model = JobModel(mongo_db)
         self.queue_clients = {}  # cache service queues
         self.resolver = CommandResolver()
+        self.storage = storage
+        self.job_step_storage_service = job_step_storage_service
 
     def create_job(self, job_payload: dict) -> dict:
         """
@@ -52,7 +55,7 @@ class JobOrchestratorService:
         transitions_data = job_payload.get("step_transitions", [])
         step_transitions = []
         step_name_to_id = {s.name: s.step_id for s in job_steps}
-        step_name_to_composite = {s.name: s.get_composite_name() for s in job_steps}
+        # step_name_to_composite = {s.name: s.get_composite_name() for s in job_steps}
         
         for t in transitions_data:
             from_name, to_name = t["from_step_name"], t["to_step_name"]
@@ -77,7 +80,7 @@ class JobOrchestratorService:
         self.job_model.create_job(job)
 
         # Pre-create all directory structure for this job workflow
-        self._prepare_job_directory_structure(job)
+        self.job_step_storage_service._prepare_job_directory_structure(job)
 
         # Dispatch first steps that have no dependencies
         for step in job.steps:
@@ -86,6 +89,7 @@ class JobOrchestratorService:
 
         return job.dict()
 
+    # TODO: move these to job model or helper
     def get_job(self, job_id: str) -> dict | None:
         """
         Retrieve a job by ID from the database.
@@ -127,55 +131,6 @@ class JobOrchestratorService:
     # -------------------------------------------------------------------------
     # Storage management
     # -------------------------------------------------------------------------
-    def _prepare_job_directory_structure(self, job: Job) -> None:
-        """
-        Pre-create all directory structures needed for this job's workflow.
-        All outputs now go to job-step directories regardless of storage policy.
-        Storage policy determines cleanup behavior, not directory structure.
-        """
-        if not job.user_id:
-            print("⚠️ No user_id provided, skipping directory structure creation")
-            return
-            
-        # Create job-step directory for each step
-        for step in job.steps:
-            # Create job-step directory using composite name
-            composite_name = step.get_composite_name()
-            job_step_dir = f"{STORAGE_ROOT}/users/{job.user_id}/jobs/{job.job_id}/{composite_name}"
-            self._ensure_directory_exists(job_step_dir, f"job step: {step.name}")
-            
-            # Pre-create directories for all output paths of this step
-            for output_key, output_path in step.outputs.items():
-                # Resolve template variables in output paths
-                resolved_path = output_path.replace("{{job_id}}", job.job_id)
-                if job.user_id:
-                    resolved_path = resolved_path.replace("{{user_id}}", job.user_id)
-                resolved_path = resolved_path.replace("{{step_id}}", step.step_id)
-                resolved_path = resolved_path.replace("{{composite_name}}", composite_name)
-                
-                # Convert relative path to absolute using STORAGE_ROOT
-                if not resolved_path.startswith("/"):
-                    resolved_path = os.path.join(STORAGE_ROOT, resolved_path)
-                
-                # Ensure this is within the storage root
-                if not resolved_path.startswith(STORAGE_ROOT):
-                    continue  # Skip non-storage paths
-                
-                # Extract directory path from file path
-                output_dir = os.path.dirname(resolved_path)
-                self._ensure_directory_exists(output_dir, f"output: {output_key}")
-        
-        print(f"✅ Pre-created job-step directories for job {job.job_id}")
-        print(f"📁 All outputs will be written to job-step directories")
-        print(f"🧹 Storage policy will determine cleanup behavior, not directory location")
-    
-    def _ensure_directory_exists(self, directory_path: str, description: str) -> None:
-        """Ensure a directory exists using direct filesystem operations."""
-        try:
-            os.makedirs(directory_path, exist_ok=True)
-            print(f"📁 Created directory: {directory_path} ({description})")
-        except Exception as e:
-            print(f"⚠️ Failed to create directory {directory_path} ({description}): {e}")
 
     # -------------------------------------------------------------------------
     # Queue utils

@@ -6,9 +6,7 @@ import os
 STORAGE_ROOT = os.getenv("STORAGE_ROOT", "/app/storage")
 
 bp = Blueprint("user_assets", __name__)
-# FIXME: instead of a host like user:// we need to check the environment
-# and either upload to the local storage dir or a yet-to-be-implemented remote storage
-# like S3
+# FIXME: use StorageManager from StorageFactory
 @bp.route("/users/<user_id>/assets", methods=["POST"])
 def upload_user_asset(user_id):
     """

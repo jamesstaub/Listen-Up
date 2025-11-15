@@ -19,7 +19,7 @@ app.register_blueprint(job_controller_bp)
 from backend.api.user_assets_controller import bp as user_assets_bp
 app.register_blueprint(user_assets_bp)
 
-from backend.modules.job.backend_queue_service import BackendQueueService
+from backend.modules.job.services.backend_queue_service import BackendQueueService
 
 # Global variable to ensure we only start the queue listener once
 _queue_listener_started = False
@@ -27,6 +27,7 @@ _queue_listener_started = False
 def start_queue_listener():
     """
     Start a background thread that listens for job status updates from Redis.
+    Runs in Flask application context.
     """
     global _queue_listener_started
     
@@ -37,13 +38,15 @@ def start_queue_listener():
     print("🚀 Backend: Starting queue listener thread...")
     _queue_listener_started = True
     
-    try:
-        service = BackendQueueService(mongo.db)
-        print("🎧 Backend: Queue listener service created, starting to run...")
-        service.run()
-    except Exception as e:
-        print(f"❌ Backend: Failed to start queue listener: {e}")
-        _queue_listener_started = False  # Reset on error
+    # Push Flask application context for background thread
+    with app.app_context():
+        try:
+            service = BackendQueueService()
+            print("🎧 Backend: Queue listener service created, starting to run...")
+            service.run()
+        except Exception as e:
+            print(f"❌ Backend: Failed to start queue listener: {e}")
+            _queue_listener_started = False  # Reset on error
 
 
 # Start the queue listener immediately when the module is imported
@@ -53,6 +56,8 @@ threading.Thread(target=start_queue_listener, daemon=True).start()
 
 
 if __name__ == "__main__":
+    # TODO: probably better to run the backend queue listener on
+    # a different service process than the Flask app itself
     logging.basicConfig(level=logging.INFO)
     threading.Thread(target=start_queue_listener, daemon=True).start()
     app.run(host="0.0.0.0", port=8000, debug=False)

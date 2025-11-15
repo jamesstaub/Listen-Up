@@ -687,8 +687,8 @@ if echo "$COMPLEX_JOB_RESPONSE" | jq -e '.job_id' > /dev/null 2>&1; then
     CREATED_JOBS+=("$COMPLEX_JOB_ID")
     echo "  📝 Added $COMPLEX_JOB_ID to cleanup list"
     
-    echo "⏰ Waiting 3 seconds for complex job processing..."
-    sleep 3
+    echo "⏰ Waiting 10 seconds for complex job processing..."
+    sleep 10
     
     # Check if job completed and verify output files
     COMPLEX_JOB_DIR="./storage/users/test_user_123/jobs/$COMPLEX_JOB_ID"
