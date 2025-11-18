@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 import uuid
 from pydantic import BaseModel, Field
@@ -14,7 +14,7 @@ class Job(BaseModel):
     # User context for storage management
     user_id: Optional[str] = None
     
-    status: str = JobStatus.PENDING
+    status: JobStatus = JobStatus.PENDING
     steps: List[JobStep] = Field(default_factory=list)
     step_transitions: List[StepTransition] = Field(default_factory=list)
     
@@ -27,15 +27,21 @@ class Job(BaseModel):
             datetime: lambda v: v.isoformat() if v else None
         }
 
-    # --- Convenience methods ---
-    def is_pending(self) -> bool:
-        return self.status == JobStatus.PENDING
-
-    def is_processing(self) -> bool:
-        return self.status == JobStatus.PROCESSING
-
-    def is_complete(self) -> bool:
-        return self.status == JobStatus.COMPLETE
-
-    def is_failed(self) -> bool:
-        return self.status == JobStatus.FAILED
+    
+    def get_step_outputs(self, step_id: str) -> Dict[str, Any]:
+        """
+        Get outputs from a specific step in this job.
+        Returns empty dict if step not found or has no outputs.
+        """
+        step = self.find_step(step_id)
+        if not step:
+            return {}
+        
+        return step.outputs
+    
+    def find_step(self, step_id: str) -> Optional['JobStep']:
+        """
+        Find a step by ID with proper typing.
+        Returns None if not found.
+        """
+        return next((s for s in self.steps if s.step_id == step_id), None)

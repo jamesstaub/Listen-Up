@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify, current_app
 from backend.factories.service_factory import ServiceFactory
+from backend.modules.job.models.job_model import JobModel
 
 bp = Blueprint("job_controller", __name__)
 
@@ -73,7 +74,7 @@ def create_job():
         
         # Create orchestrator service using factory with user context
         orchestrator = ServiceFactory.create_job_orchestrator(user_id)
-        # Pass the full payload to support step_transitions
+        # Pass the raw payload - orchestrator handles step processing
         result = orchestrator.create_job(payload)
         return jsonify(result), 201
 
@@ -91,15 +92,14 @@ def get_job(job_id):
     Fetch job details from MongoDB.
     """
     try:
-        # Create orchestrator service using factory
-        orchestrator = ServiceFactory.create_job_orchestrator()
-        # FIXME: move get_job out of orchestrator, avoid factory construictor here
-        job = orchestrator.get_job(job_id)
+        from backend.modules.job.models.job_model import JobModel
+        
+        job = JobModel.find(job_id)
         
         if not job:
             return jsonify({"error": "Job not found"}), 404
 
-        return jsonify(job), 200
+        return jsonify(job.dict()), 200
         
     except Exception as e:
         return jsonify({"error": str(e)}), 500

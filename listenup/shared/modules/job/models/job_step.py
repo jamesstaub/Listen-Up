@@ -24,25 +24,15 @@ class JobStep(BaseModel):
     finished_at: Optional[datetime] = None
     microservice: Optional[str] = None                      # Which service should run it
 
-    def mark_running(self):
-        self.status = JobStepStatus.RUNNING
-        self.started_at = datetime.now()
-
-    def mark_complete(self, outputs: Optional[Dict[str, Any]] = None):
-        self.status = JobStepStatus.COMPLETE
-        self.outputs = outputs or {}
-        self.finished_at = datetime.now()
-
-    def mark_failed(self, error_message: str):
-        self.status = JobStepStatus.FAILED
-        self.error_message = error_message
-        self.finished_at = datetime.now()
-
+    # --- Business logic queries (no persistence) ---
     def is_complete(self) -> bool:
         return self.status == JobStepStatus.COMPLETE
 
     def is_failed(self) -> bool:
         return self.status == JobStepStatus.FAILED
+    
+    def is_running(self) -> bool:
+        return self.status == JobStepStatus.RUNNING
 
     @staticmethod
     def params_hash(params: Dict[str, Any]) -> str:

@@ -22,8 +22,8 @@ class JobOrchestratorService:
     Dispatches steps to microservices and listens for completion events.
     """
 
-    def __init__(self, mongo_db, storage: StorageManager, job_step_storage_service):
-        self.job_model = JobModel(mongo_db)
+    def __init__(self, storage: StorageManager, job_step_storage_service):
+        # Remove job_model instance - use class methods instead
         self.queue_clients = {}  # cache service queues
         self.resolver = CommandResolver()
         self.storage = storage
@@ -77,7 +77,7 @@ class JobOrchestratorService:
             status=JobStatus.PENDING,
             created_at=created_at
         )
-        self.job_model.create_job(job)
+        JobModel.create(job)
 
         # Pre-create all directory structure for this job workflow
         self.job_step_storage_service._prepare_job_directory_structure(job)
@@ -89,21 +89,11 @@ class JobOrchestratorService:
 
         return job.dict()
 
-    # TODO: move these to job model or helper
-    def get_job(self, job_id: str) -> dict | None:
-        """
-        Retrieve a job by ID from the database.
-        """
-        job = self.job_model.get_job(job_id)
-        if job:
-            return job.dict()
-        return None
-
     def retry_job(self, job_id: str) -> dict:
         """
         Retry a failed or incomplete job from the first non-complete step.
         """
-        job = self.job_model.get_job(job_id)
+        job = JobModel.find(job_id)
         if not job:
             raise ValueError(f"Job {job_id} not found")
         
@@ -117,8 +107,8 @@ class JobOrchestratorService:
         if not resume_step:
             raise ValueError(f"Job {job_id} is already complete")
         
-        # Update job status to processing and dispatch the step
-        self.job_model.update_job_status(job_id, JobStatus.PROCESSING)
+        # Update job status using Rails-like generic update method
+        JobModel.update(job_id, status=JobStatus.PROCESSING)
         self._dispatch_step(job, resume_step)
         
         return {
@@ -157,13 +147,13 @@ class JobOrchestratorService:
         composite_name = step.get_composite_name()
         job_step_path = f"users/{job.user_id}/jobs/{job.job_id}/{composite_name}" if job.user_id else "none"
         
-        self.job_model.update_job_step_status(job.job_id, step.step_id, JobStepStatus.PROCESSING)
+        JobModel.update_job_step_status(job.job_id, step.step_id, JobStepStatus.PROCESSING)
 
         # Gather previous outputs via StepTransition
         previous_outputs = {}
         for transition in job.step_transitions:
             if transition.to_step_id == step.step_id:
-                previous_outputs.update(self.job_model.get_step_outputs(job.job_id, transition.from_step_id))
+                previous_outputs.update(JobModel.get_step_outputs(job.job_id, transition.from_step_id))
 
         # Build the event and resolve it
         composite_name = step.get_composite_name()
@@ -220,16 +210,16 @@ class JobOrchestratorService:
 
         print(f"⚙️ Handling status event: {job_id=} {step_id=} {status=}")
 
-        job = self.job_model.get_job(job_id)
+        job = JobModel.find(job_id)
         if not job:
             print(f"❌ Job {job_id} not found in DB")
             return
 
         # Update job step status in DB
-        self.job_model.update_job_step_status(job_id, step_id, status, outputs=outputs)
+        JobModel.update_job_step_status(job_id, step_id, status, outputs=outputs)
 
         # CRITICAL: Fetch fresh job data after status update to avoid stale data
-        job = self.job_model.get_job(job_id)
+        job = JobModel.find(job_id)
         if not job:
             print(f"❌ Job {job_id} not found after update")
             return
@@ -246,13 +236,13 @@ class JobOrchestratorService:
                 # No more steps are ready - check if job is complete
                 if self._is_job_complete(job):
                     print(f"✅ Job {job_id} fully completed")
-                    self.job_model.update_job_status(job_id, JobStatus.COMPLETE)
+                    JobModel.update(job_id, status=JobStatus.COMPLETE)
                 else:
                     print(f"⏳ Job {job_id} waiting for more dependencies")
 
         elif status == JobStepStatus.FAILED:
             print(f"💥 Step {step_id} failed; marking job {job_id} as FAILED")
-            self.job_model.update_job_status(job_id, JobStatus.FAILED)
+            JobModel.update(job_id, status=JobStatus.FAILED)
 
         elif status == JobStepStatus.PROCESSING:
             print(f"🛠 Step {step_id} is processing... (no action needed)")
@@ -365,7 +355,7 @@ class JobOrchestratorService:
         for transition in job.step_transitions:
             if transition.to_step_id == step.step_id:
                 # Get outputs from each dependency step
-                previous_outputs = self.job_model.get_step_outputs(
+                previous_outputs = JobModel.get_step_outputs(
                     job.job_id, transition.from_step_id
                 )
                 
@@ -458,7 +448,7 @@ class JobOrchestratorService:
                 for step in job.steps:
                     if step.step_id == target_step_id:
                         # Map outputs from previous step to next step inputs
-                        previous_outputs = self.job_model.get_step_outputs(
+                        previous_outputs = JobModel.get_step_outputs(
                             job.job_id, completed_step_id
                         )
                         mapped_inputs = transition.apply_mapping(previous_outputs)

@@ -45,11 +45,7 @@ The `make dev` command creates symlinks that mirror the container structure:
 microservices_shared -> microservices/shared
 ```
 
-Now these imports work identically in development and production:
-```python
-from microservices_shared.modules.microservice_base import MicroserviceBase
-from shared.modules.assets.asset_manager_factory import create_asset_manager
-```
+
 
 ## For Development (IDE Support)
 
@@ -221,7 +217,7 @@ If you need to run commands outside VS Code:
 source venv/bin/activate
 
 # Now you can run Python commands directly
-python -c "import shared.modules.assets.asset_manager"
+python -c "import shared.modules.job.models.job"
 pytest
 flake8
 

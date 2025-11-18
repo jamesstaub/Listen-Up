@@ -6,112 +6,44 @@ from shared.modules.job.models.job import Job
 from shared.modules.job.models.job_step import JobStep
 from shared.modules.job.enums.job_status_enum import JobStatus
 from shared.modules.job.enums.job_step_status_enum import JobStepStatus
+from backend.models.base_nosql_model import BaseNoSqlModel
 
 
-class JobModel:
+class JobModel(BaseNoSqlModel):
     """
     MongoDB persistence wrapper for Job objects.
+    Inherits common CRUD operations from BaseNoSqlModel.
     """
 
-    def __init__(self, mongo_db):
-        self.db = mongo_db
-        self.collection: Collection = mongo_db.jobs
-
-    # ----------------------------
-    # Creation / Insertion
-    # ----------------------------
-    def create_job(self, job: Job) -> Job:
-        """
-        Insert a new Job into MongoDB.
-        """
-        doc = job.dict()
-        doc["_id"] = job.job_id
-        doc["updated_at"] = datetime.utcnow()
-
-        self.collection.insert_one(doc)
-        return job
+    @property
+    def collection(self) -> Collection:
+        """Get the jobs collection from the database."""
+        return self.db.jobs
 
     @classmethod
-    def create_and_insert(cls, collection: Collection, job_id: str, steps_data: List[Dict]) -> Job:
+    def _from_doc(cls, doc: Dict[str, Any]) -> Job:
         """
-        Convenience helper: build a Job from steps + insert it in one go.
+        Convert MongoDB document to Job instance.
         """
-        steps = [JobStep(name=s["name"], order=i) for i, s in enumerate(steps_data)]
-        job = Job(job_id=job_id, steps=steps, created_at=datetime.utcnow())
+        doc["job_id"] = str(doc["_id"])
+        del doc["_id"]  # Remove MongoDB's _id field
+        return Job(**doc)
 
-        doc = job.dict()
-        doc["_id"] = job.job_id
-        doc["updated_at"] = datetime.utcnow()
-
-        collection.insert_one(doc)
-        return job
-
-    def insert(self, job: Job) -> None:
-        """
-        Insert an existing Job into MongoDB.
-        """
-        doc = job.dict()
-        doc["_id"] = job.job_id
-        doc.setdefault("created_at", datetime.utcnow())
-        doc["updated_at"] = datetime.utcnow()
-
-        self.collection.insert_one(doc)
-
-    # ----------------------------
-    # Retrieval
-    # ----------------------------
-    def get_job(self, job_id: str) -> Optional[Job]:
-        """
-        Retrieve a job by ID.
-        """
-        job_doc = self.collection.find_one({"_id": job_id})
-        if job_doc:
-            job_doc["job_id"] = str(job_doc["_id"])
-            del job_doc["_id"]  # Remove MongoDB's _id field
-            return Job(**job_doc)
-        return None
-
-    def get_step_outputs(self, job_id: str, step_id: str) -> dict[str, Any]:
+    @classmethod
+    def get_step_outputs(cls, job_id: str, step_id: str) -> Dict[str, Any]:
         """
         Retrieve the outputs of a specific step in a job as a dictionary.
-        
-        Args:
-            job_id: ID of the job
-            step_id: ID of the step
-        
-        Returns:
-            Dict of output_name -> output_value. Empty dict if none exist.
+        Delegates to the Job domain object's instance method.
         """
-        job = self.get_job(job_id)
+        job = cls.find(job_id)
         if not job:
             raise ValueError(f"Job not found: {job_id}")
 
-        step = next((s for s in job.steps if s.step_id == step_id), None)
-        if not step:
-            raise ValueError(f"Step not found: {step_id} in job {job_id}")
+        return job.get_step_outputs(step_id)
 
-        outputs = step.outputs if hasattr(step, 'outputs') and step.outputs else {}
-        return outputs if isinstance(outputs, dict) else {}
-
-    # ----------------------------
-    # Updates
-    # ----------------------------
-    def update_job_status(self, job_id: str, status: JobStatus) -> None:
-        """
-        Update the overall job status.
-        """
-        self.collection.update_one(
-            {"_id": job_id},
-            {
-                "$set": {
-                    "status": status.value if hasattr(status, "value") else str(status),
-                    "updated_at": datetime.utcnow(),
-                }
-            },
-        )
-
+    @classmethod
     def update_job_step_status(
-        self,
+        cls,
         job_id: str,
         step_id: str,
         status: JobStepStatus,
@@ -121,41 +53,25 @@ class JobModel:
     ) -> None:
         """
         Update a specific job step's status and outputs.
+        Delegates to JobStepModel for step-specific operations.
         """
-        update_fields: Dict[str, Any] = {
-            "steps.$.status": status.value if hasattr(status, "value") else str(status),
-            "updated_at": datetime.utcnow(),
-        }
-
-        if outputs is not None:
-            update_fields["steps.$.outputs"] = outputs
-
-        if error_message is not None:
-            update_fields["steps.$.error_message"] = error_message
-        elif clear_error:
-            update_fields["steps.$.error_message"] = None
-
-        self.collection.update_one(
-            {"_id": job_id, "steps.step_id": step_id},
-            {"$set": update_fields},
+        from backend.modules.job.models.job_step_model import JobStepModel
+        from datetime import datetime
+        
+        # Determine timestamps based on status
+        started_at = datetime.utcnow() if status == JobStepStatus.PROCESSING else None
+        finished_at = datetime.utcnow() if status in [JobStepStatus.COMPLETE, JobStepStatus.FAILED] else None
+        
+        # Clear error message if requested
+        if clear_error:
+            error_message = None
+            
+        JobStepModel.update_step_status(
+            job_id=job_id,
+            step_id=step_id,
+            status=status,
+            outputs=outputs,
+            started_at=started_at,
+            finished_at=finished_at,
+            error_message=error_message
         )
-
-    def update_job_step(
-        self,
-        job_id: str,
-        step_index: int,
-        update_fields: Dict[str, Any],
-        expected_updated_at: Optional[datetime] = None,
-    ):
-        """
-        Update a single JobStep in a Job document, optionally using optimistic locking.
-        """
-        update = {f"steps.{step_index}.{k}": v for k, v in update_fields.items()}
-        update["updated_at"] = datetime.utcnow()
-
-        query: Dict[str, Any] = {"_id": job_id}
-        if expected_updated_at:
-            query["updated_at"] = expected_updated_at
-
-        res = self.collection.update_one(query, {"$set": update})
-        return res.matched_count, res.modified_count
