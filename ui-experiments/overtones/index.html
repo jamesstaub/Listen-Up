@@ -382,7 +382,7 @@
         </div>
 
         <div class="control-card mt-6">
-            <!-- Master Gain and Visualization Spread Controls -->
+            <!-- Master Gain and Visualization Controls -->
             <div class="control-row">
                  <!-- Master Gain Control -->
                 <div class="labeled-control">
@@ -397,6 +397,15 @@
                 <div class="labeled-control">
                     <label for="spread-slider">Visualization Spread</label>
                     <input type="range" id="spread-slider" min="0" max="1" step="0.01" value="0.2">
+                </div>
+
+                <!-- Visualization Frequency Control -->
+                <div class="labeled-control">
+                    <label for="viz-freq-slider">
+                        Animation Speed 
+                        <span id="viz-freq-value">2.0 Hz</span>
+                    </label>
+                    <input type="range" id="viz-freq-slider" min="0.1" max="10" step="0.1" value="2.0">
                 </div>
             </div>
 
@@ -551,6 +560,7 @@
         let isSubharmonic = false; 
         let currentWaveform = 'sine'; 
         let maxWavetableSize = 4096; // Standard size for a PeriodicWave table
+        let visualizationFrequency = 2.0; // Hz - Controls the rotation speed of the polar visualization
         
         // --- P5.js Instance Reference (CRITICAL FIX) ---
         let p5Instance = null; 
@@ -953,8 +963,30 @@
                  return;
             }
 
-            const real = new Float32Array(maxWavetableSize).fill(0);
-            const imag = sampledBuffer; 
+            // Convert time-domain samples to frequency-domain coefficients using FFT approach
+            // For Web Audio's PeriodicWave, we need to provide the Fourier coefficients
+            // Since we have a time-domain representation, we'll use a simple approach:
+            // Create the PeriodicWave by analyzing the harmonic content
+            
+            const numHarmonics = Math.min(harmonicAmplitudes.length, 128); // Limit for better performance
+            const real = new Float32Array(numHarmonics + 1).fill(0);
+            const imag = new Float32Array(numHarmonics + 1).fill(0);
+            
+            // Use the current harmonic amplitudes and ratios to build the Fourier series
+            for (let h = 0; h < numHarmonics && h < harmonicAmplitudes.length; h++) {
+                const amplitude = harmonicAmplitudes[h];
+                const ratio = currentSystem.ratios[h];
+                
+                if (amplitude > 0 && ratio > 0) {
+                    // For each harmonic, we need to find the closest integer harmonic
+                    // and distribute the amplitude accordingly
+                    const harmonicIndex = Math.round(ratio);
+                    if (harmonicIndex > 0 && harmonicIndex < real.length) {
+                        // Add to the sine component (imaginary) for the base waveform shape
+                        imag[harmonicIndex] += amplitude;
+                    }
+                }
+            }
             
             const customWave = audioContext.createPeriodicWave(real, imag, { disableNormalization: false });
             customWaveCount++;
@@ -987,7 +1019,7 @@
         // --- P5 Sketch Integration (Visualization) ---
 
         let toneWheelSketch = function(p) {
-            let spreadFactor = 0.2; 
+            let spreadFactor = 0.5; 
             let baseRadius;
             let maxAmplitudeRadial;
             
@@ -1030,9 +1062,17 @@
 
             p.getWaveValue = function(type, theta) {
                 if (type.startsWith('custom')) {
-                    // When using a custom PeriodicWave, the visualization just shows a sine wave
-                    // as we can't easily reverse-engineer the complex waveform from the PeriodicWave object.
-                    return p.sin(theta);
+                    // For custom waveforms, synthesize the visualization based on current harmonic content
+                    // This gives a more accurate visual representation of what's being heard
+                    let sum = 0;
+                    for (let h = 0; h < harmonicAmplitudes.length; h++) {
+                        const ratio = currentSystem.ratios[h];
+                        const amp = harmonicAmplitudes[h];
+                        if (amp > 0) {
+                            sum += p.sin(ratio * theta) * amp;
+                        }
+                    }
+                    return sum;
                 }
                 
                 if (type === 'sine') {
@@ -1074,7 +1114,9 @@
                 p.ellipse(0, 0, baseRadius * 2, baseRadius * 2);
 
                 const points = 360; 
-                let rotationSpeed = 0.01; 
+                // Convert visualization frequency (Hz) to rotation speed (radians per frame)
+                // At 60 FPS, 1 Hz = 2π/60 radians per frame
+                let rotationSpeed = (visualizationFrequency * p.TWO_PI) / 60; 
                 let currentAngle = p.frameCount * rotationSpeed;
 
                 // 1. Draw Individual Partials
@@ -1111,9 +1153,10 @@
                 }
 
                 // 2. Draw the Final Summed Waveform
-                p.stroke('#e5e7eb'); 
-                p.strokeWeight(3.5);
-                p.fill('#10b98125'); 
+                // p.stroke('#e5e7eb'); 
+                p.strokeWeight(0);
+
+                p.fill(16, 185, 129, 37);
                 
                 p.beginShape();
                 for (let i = 0; i <= points; i++) {
@@ -1487,6 +1530,15 @@
                 spreadFactor = parseFloat(spreadSlider.value);
                 spreadSlider.addEventListener('input', (e) => {
                     spreadFactor = parseFloat(e.target.value);
+                });
+
+                // --- Visualization Frequency Control ---
+                const vizFreqSlider = document.getElementById('viz-freq-slider');
+                const vizFreqValueDisplay = document.getElementById('viz-freq-value');
+                
+                vizFreqSlider.addEventListener('input', (e) => {
+                    visualizationFrequency = parseFloat(e.target.value);
+                    vizFreqValueDisplay.textContent = `${visualizationFrequency.toFixed(1)} Hz`;
                 });
 
                 // --- Ratio System Dropdown ---
