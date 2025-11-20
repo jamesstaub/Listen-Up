@@ -1,0 +1,1566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spectral Audio Synthesizer (Wavetable Export) v5</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #1f2937; /* Dark background */
+            color: #f3f4f6;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1200px;
+        }
+        canvas {
+            border: 2px solid #4b5563;
+            border-radius: 1rem;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            margin-bottom: 2rem;
+            background-color: #0d131f; /* Canvas background */
+        }
+        .control-card {
+            background-color: #374151;
+            border-radius: 0.75rem;
+            padding: 1rem;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        .drawbar-container {
+            display: flex;
+            gap: 0.5rem; 
+            padding: 10px 0;
+            overflow-x: auto;
+            max-width: 100%;
+            justify-content: center;
+        }
+        .drawbar {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 44px; 
+            flex-shrink: 0;
+        }
+        .drawbar-label {
+            font-size: 0.75rem; 
+            font-weight: 500;
+            text-align: center;
+            height: 20px;
+            margin-bottom: 5px;
+            color: #d1d5db;
+        }
+        /* Ratio System Selector Styles */
+        .system-control-group {
+            background-color: #2b333e;
+            border-radius: 0.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+        }
+        .system-selector select {
+            background-color: #1f2937;
+            color: #f3f4f6;
+            border: 1px solid #4b5563;
+            padding: 0.5rem;
+            border-radius: 0.375rem;
+            font-size: 1rem;
+            cursor: pointer;
+            width: 100%;
+        }
+        .system-description {
+            font-size: 0.875rem;
+            color: #9ca3af;
+            padding: 0.5rem 0;
+        }
+        .subharmonic-toggle-container {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 1rem;
+            padding-top: 0.5rem;
+            border-top: 1px solid #4b5563;
+        }
+        #subharmonic-toggle {
+            cursor: pointer;
+            width: 3.5rem;
+            height: 1.5rem;
+            border-radius: 0.75rem;
+            background-color: #ef4444; /* Red - Overtone */
+            transition: background-color 0.2s;
+            position: relative;
+        }
+        #subharmonic-toggle.active {
+            background-color: #10b981; /* Green - Subharmonic */
+        }
+        #subharmonic-toggle::before {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 1.1rem;
+            height: 1.1rem;
+            border-radius: 50%;
+            background-color: white;
+            transition: transform 0.2s;
+        }
+        #subharmonic-toggle.active::before {
+            transform: translateX(2rem);
+        }
+        .toggle-label {
+            font-weight: 700;
+            color: #f3f4f6;
+            text-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+        }
+        
+        /* --- General Controls --- */
+        .control-row {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        @media (min-width: 640px) {
+             .control-row {
+                flex-direction: row;
+             }
+        }
+
+        .labeled-control {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 0.5rem 1rem;
+            background-color: #2b333e;
+            border-radius: 0.5rem;
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
+        }
+
+        .labeled-control label {
+            font-weight: 700;
+            color: #93c5fd;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.25rem;
+            font-size: 0.9rem;
+        }
+        
+        /* Control Inputs (Sliders and Selects) */
+        .waveform-select-group select,
+        .labeled-control input[type="range"] {
+            background-color: #1f2937;
+            color: #f3f4f6;
+            border: 1px solid #4b5563;
+            padding: 0.5rem;
+            border-radius: 0.375rem;
+            font-size: 1rem;
+            cursor: pointer;
+            width: 100%;
+        }
+        .labeled-control input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            height: 8px;
+            background: #1f2937;
+            border-radius: 4px;
+            margin-top: 0.5rem;
+            padding: 0;
+        }
+        .labeled-control input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            background: #10b981;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+        }
+
+        /* --- Fundamental/Keyboard Controls --- */
+        .frequency-control-group {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .fundamental-input-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .fundamental-input-group input[type="number"] {
+            background-color: #1f2937;
+            color: #f3f4f6;
+            border: 1px solid #4b5563;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.375rem;
+            width: 80px;
+            text-align: right;
+        }
+
+        /* Keyboard Styles */
+        .keyboard-container {
+            position: relative;
+            height: 100px;
+            display: flex;
+            justify-content: center;
+            margin: 10px 0;
+        }
+        .key {
+            position: relative;
+            height: 100px;
+            cursor: pointer;
+            border: 1px solid #1f2937;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.4);
+            transition: all 0.05s ease;
+            z-index: 1;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            padding-bottom: 5px;
+            font-size: 0.75rem;
+        }
+        .key.white {
+            background-color: #f3f4f6;
+            width: 40px;
+            margin-right: -1px;
+            border-radius: 0 0 5px 5px;
+            color: #1f2937;
+            z-index: 1;
+        }
+        .key.black {
+            background-color: #1f2937;
+            width: 25px;
+            height: 60px;
+            margin-left: -12px;
+            margin-right: -12px;
+            z-index: 2;
+            color: #f3f4f6;
+            padding-bottom: 3px;
+        }
+        .key.active {
+            box-shadow: 0 0 15px #10b981;
+            transform: scale(0.98);
+        }
+        .key.white.active {
+            background-color: #d1fae5; /* Light green on press */
+        }
+        .key.black.active {
+            background-color: #065f46; /* Darker green on press */
+        }
+
+        /* Octave Controls */
+        .octave-control {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 10px;
+        }
+        .octave-button {
+            background-color: #1f2937;
+            color: #a8a29e;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            font-weight: 700;
+            transition: background-color 0.2s;
+        }
+        .octave-button:hover {
+            background-color: #4b5563;
+            color: white;
+        }
+        
+        /* --- Button and Action Styles (unchanged) --- */
+        #play-button {
+            background-color: #ef4444; /* Red for Stop */
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-weight: bold;
+            transition: background-color 0.2s;
+        }
+        #play-button.playing {
+            background-color: #10b981; /* Green for Playing */
+        }
+        #play-button:hover {
+            opacity: 0.9;
+        }
+        
+        .action-button {
+            background-color: #f59e0b;
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            transition: background-color 0.2s;
+        }
+        .action-button.export {
+            background-color: #3b82f6; /* Blue for export/download */
+        }
+        .action-button.add-wave {
+            background-color: #10b981; /* Green for adding */
+        }
+        .action-button:hover {
+            filter: brightness(1.1);
+        }
+
+        /* --- Custom Drawbar Styling (Vertical Slider) --- */
+        input[type="range"].vertical {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 140px; 
+            height: 25px; 
+            margin: 0;
+            padding: 0;
+            cursor: pointer;
+            background: transparent;
+            transform: rotate(-90deg);
+            transform-origin: center;
+        }
+        .drawbar-input-wrapper {
+            position: relative;
+            height: 140px; 
+            width: 25px; 
+            margin: 10px 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .drawbar-track {
+            position: absolute;
+            width: 8px; 
+            height: 100%;
+            background: #2b333e; 
+            border-radius: 4px;
+        }
+        input[type="range"].vertical::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 35px; 
+            height: 20px; 
+            border-radius: 4px;
+            border: none;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.6);
+            cursor: grab;
+        }
+        /* Drawbar Colors (Theming) */
+        .db-brown input[type="range"].vertical::-webkit-slider-thumb { background: #8d624a; }
+        .db-brown .drawbar-label { color: #d1b4a0; }
+        .db-white input[type="range"].vertical::-webkit-slider-thumb { background: #e0e0e0; }
+        .db-white .drawbar-label { color: #f3f4f6; }
+        .db-black input[type="range"].vertical::-webkit-slider-thumb { background: #333333; }
+        .db-black .drawbar-label { color: #a0a0a0; }
+        .db-blue input[type="range"].vertical::-webkit-slider-thumb { background: #3b82f6; }
+        .db-red input[type="range"].vertical::-webkit-slider-thumb { background: #ef4444; }
+
+    </style>
+</head>
+<body class="p-4 sm:p-8 flex flex-col justify-center items-center">
+
+    <div class="container mx-auto">
+        <h1 class="text-2xl sm:text-3xl font-extrabold mb-6 text-center text-teal-300">
+            Spectral Audio Synthesizer (Wavetable Export) v5
+        </h1>
+        
+        <div class="flex justify-center mb-6 space-x-4 flex-wrap gap-4">
+            <button id="play-button" class="flex-grow sm:flex-grow-0">Start Tone</button>
+            <button id="export-wav-button" class="action-button export flex-grow sm:flex-grow-0">Export Wavetable (WAV)</button>
+            <button id="add-wave-button" class="action-button add-wave flex-grow sm:flex-grow-0">Add to Waveforms</button>
+        </div>
+
+        <div id="canvas-container" class="flex justify-center">
+            <!-- p5.js canvas injected here -->
+        </div>
+
+        <div class="control-card mt-6">
+            <!-- Master Gain and Visualization Spread Controls -->
+            <div class="control-row">
+                 <!-- Master Gain Control -->
+                <div class="labeled-control">
+                    <label for="master-gain-slider">
+                        Master Gain 
+                        <span id="master-gain-value">3%</span>
+                    </label>
+                    <input type="range" id="master-gain-slider" min="0.01" max="0.5" step="0.01" value="0.03">
+                </div>
+
+                <!-- Visualization Spread Control -->
+                <div class="labeled-control">
+                    <label for="spread-slider">Visualization Spread</label>
+                    <input type="range" id="spread-slider" min="0" max="1" step="0.01" value="0.2">
+                </div>
+            </div>
+
+            <!-- Fundamental, Waveform and Octave/Keyboard Controls -->
+            <div class="control-row">
+                <!-- Group for Fundamental/Keyboard and Waveform -->
+                <div class="frequency-control-group">
+                    <!-- Fundamental Frequency Control (Hz Input + Keyboard) -->
+                    <div class="labeled-control">
+                        <label for="fundamental-input">
+                            Fundamental Frequency 
+                            <span class="fundamental-input-group">
+                                <input type="number" id="fundamental-input" value="130.81" step="0.01"> Hz
+                            </span>
+                        </label>
+                        
+                        <!-- Octave Controls -->
+                        <div class="octave-control mt-2 mb-2">
+                            <button id="octave-down" class="octave-button">&lt; Octave Down</button>
+                            <span id="current-octave-display" class="font-bold text-lg text-indigo-300">Octave 3</span>
+                            <button id="octave-up" class="octave-button">Octave Up &gt;</button>
+                        </div>
+                        
+                        <!-- Keyboard -->
+                        <div id="piano-keyboard" class="keyboard-container">
+                             <!-- Keys injected by JS -->
+                        </div>
+                    </div>
+
+                    <!-- Waveform Select -->
+                    <div class="labeled-control waveform-select-group">
+                         <label for="waveform-select" class="text-indigo-300">
+                             Partial Waveform
+                         </label>
+                         <select id="waveform-select">
+                             <option value="sine">Sine (Pure Additive)</option>
+                             <option value="square">Square (Band-Limited)</option>
+                             <option value="triangle">Triangle (Band-Limited)</option>
+                             <option value="sawtooth">Sawtooth (Band-Limited)</option>
+                         </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Ratio System Selector and Subharmonic Toggle -->
+            <div class="system-control-group">
+                <div class="system-selector">
+                    <label for="ratio-system-select" class="text-lg font-bold text-indigo-300">
+                        Overtone System
+                    </label>
+                    <select id="ratio-system-select">
+                        <!-- Options injected by JS -->
+                    </select>
+                </div>
+                
+                <div class="subharmonic-toggle-container">
+                    <span class="toggle-label text-red-400">Overtone (Multiply)</span>
+                    <div id="subharmonic-toggle" role="switch" aria-checked="false"></div>
+                    <span id="subharmonic-label" class="toggle-label text-gray-400">Subharmonic (Divide)</span>
+                </div>
+                
+                <div id="system-description" class="system-description"></div>
+            </div>
+            
+            <p class="text-xs text-gray-400 text-center mt-2">
+                All complex waveforms (Square, Sawtooth, Triangle) are now **Band-Limited** for clean sound.
+            </p>
+
+            <!-- Drawbars -->
+            <div id="drawbars" class="drawbar-container">
+                <!-- Drawbars will be injected here by JS -->
+            </div>
+        </div>
+    </div>
+    
+    <!-- Status Message for Errors/Successes -->
+    <div id="status-message" class="fixed bottom-4 right-4 text-white p-3 rounded-lg shadow-xl hidden"></div>
+
+    <script>
+        // --- Configuration and State ---
+        const spectralSystems = [
+            {
+                name: "1. Harmonic Overtone Series (Integer)",
+                description: "The natural integer multiples (1x, 2x, 3x...) found in Western instruments. Creates consonant, classic timbres.",
+                ratios: [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0],
+                labelPrecision: 1 
+            },
+            {
+                name: "2. Spectral Detuned Harmonics (Microtonal)",
+                description: "Ratios are slightly detuned (microtonal) from integer values. This creates complex beating and psychoacoustic shimmer, popular in spectral music.",
+                ratios: [1.0, 2.01, 2.99, 4.05, 5.0, 6.02, 7.0, 8.03, 8.98, 10.04, 11.0, 12.01],
+                labelPrecision: 2 
+            },
+            {
+                name: "3. Inharmonic Bell (Simplified Ratios)",
+                description: "Approximated ratios based on a stiff vibrating plate or bell ($f \\propto n^2$). These non-integer multiples create metallic, ringing, and dissonant textures.",
+                ratios: [1.0, 2.8, 5.2, 8.0, 11.5, 15.6, 20.3, 25.6, 31.5, 38.0, 45.1, 52.8], 
+                labelPrecision: 1 
+            },
+            {
+                name: "4. Gamelan Slendro Approximation",
+                description: "Approximated frequency ratios based on the five-tone, non-equally spaced Slendro scale of Indonesian Gamelan. Highly unique, non-Western melodic intervals.",
+                ratios: [1.0, 1.22, 1.48, 1.76, 2.05, 2.44, 2.96, 3.52, 4.10, 4.88, 5.92, 7.04],
+                labelPrecision: 2 
+            },
+            {
+                name: "5. Gamelan Pelog Approximation",
+                description: "Seven-tone Indonesian Gamelan (Pelog) approximated. Features wider and less symmetrical intervals than Slendro, leading to rich, dark timbres.",
+                ratios: [1.0, 1.06, 1.25, 1.33, 1.5, 1.66, 1.78, 2.0, 2.12, 2.5, 2.66, 3.0],
+                labelPrecision: 2 
+            },
+            {
+                name: "6. Bohlen-Pierce Ratios (Tritave 3:1)",
+                description: "A famous Xenharmonic scale where the 'octave' is replaced by the tritave (3:1). Sounds unusual as the 2nd partial is highly dissonant (2.25x).",
+                ratios: [1.0, 1.07, 1.15, 1.25, 1.35, 1.5, 1.6, 1.7, 1.84, 2.0, 2.15, 2.3],
+                labelPrecision: 2 
+            },
+            {
+                name: "7. High-Ratio Lydian (Russell Concept)",
+                description: "A non-traditional harmonic context favoring the Lydian mode, using higher integer-based ratios often associated with natural acoustic resonance.",
+                ratios: [1.0, 1.125, 1.266, 1.333, 1.406, 1.5, 1.687, 1.777, 1.875, 2.0, 2.11, 2.25],
+                labelPrecision: 3 
+            },
+            {
+                name: "8. Fractional Series ($n/4$ Multiples)",
+                description: "A highly inharmonic series built on $n/4$ multipliers (1.0, 1.25, 1.5, 1.75...). Creates a metallic, clanging, and extremely dissonant spectrum.",
+                ratios: [1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0, 3.25, 3.5, 3.75],
+                labelPrecision: 2 
+            }
+        ];
+        
+        // --- Web Audio API Global Variables ---
+        let audioContext;
+        let compressor;
+        let masterGain;
+        let oscillators = [];
+        let isPlaying = false;
+        let blWaveforms = {}; // Stores PeriodicWave objects (initial and user-generated)
+        let customWaveCount = 0; // Counter for custom wavetables
+        
+        // --- App State ---
+        let masterGainValue = 0.03; // Initial low gain to prevent clipping with many harmonics
+        let fundamentalFrequency = 130.81; // C3
+        let currentMidiNote = 48; // MIDI for C3
+        let currentOctave = 3;
+        const baseOctaveMidi = 48; // MIDI for C3
+        const MIDI_NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+
+        let currentSystem = spectralSystems[0]; 
+        let harmonicAmplitudes = Array(12).fill(0.0);
+        harmonicAmplitudes[0] = 1.0; 
+        let isSubharmonic = false; 
+        let currentWaveform = 'sine'; 
+        let maxWavetableSize = 4096; // Standard size for a PeriodicWave table
+        
+        // --- P5.js Instance Reference (CRITICAL FIX) ---
+        let p5Instance = null; 
+
+        // Drawbar style classes for UI look
+        const drawbarStyles = [
+            'db-white', 'db-brown', 'db-white', 'db-white', 'db-brown', 'db-black', 
+            'db-brown', 'db-white', 'db-black', 'db-blue', 'db-red', 'db-black'
+        ];
+        
+        // --- UI Utility ---
+        function showStatus(message, type = 'info') {
+            const statusBox = document.getElementById('status-message');
+            statusBox.textContent = message;
+            statusBox.classList.remove('hidden', 'bg-red-600', 'bg-green-600', 'bg-yellow-600', 'bg-blue-600');
+            
+            if (type === 'error') {
+                statusBox.classList.add('bg-red-600');
+            } else if (type === 'success') {
+                statusBox.classList.add('bg-green-600');
+            } else if (type === 'warning') {
+                statusBox.classList.add('bg-yellow-600');
+            } else {
+                statusBox.classList.add('bg-blue-600');
+            }
+
+            // Automatically hide after 4 seconds
+            setTimeout(() => {
+                statusBox.classList.add('hidden');
+            }, 4000);
+        }
+
+        /** Converts a MIDI note number to its corresponding frequency (Hz). */
+        function midiToFreq(midi) {
+            return 440 * Math.pow(2, (midi - 69) / 12);
+        }
+
+        /** Converts a frequency (Hz) to the closest MIDI note number. */
+        function freqToMidi(frequency) {
+            return 69 + 12 * Math.log2(frequency / 440);
+        }
+        
+        /** Converts a MIDI note number to its note name (e.g., 60 -> C4). */
+        function midiToNoteName(midi) {
+            const octave = Math.floor(midi / 12) - 1;
+            const noteIndex = midi % 12;
+            return MIDI_NOTE_NAMES[noteIndex] + octave;
+        }
+
+        // --- Filename Encoding Logic ---
+
+        /** * Converts a normalized gain value (0.0 to 1.0) into a single Base-16 character (0-F).
+         * @param {number} gain A float between 0.0 and 1.0.
+         * @returns {string} A single Hexadecimal character (0-F).
+         */
+        function gainToHex(gain) {
+            // Scale the 0.0-1.0 float to an integer between 0 and 15
+            const level = Math.round(gain * 15);
+            // Convert the integer to a single hex character
+            return level.toString(16).toUpperCase();
+        }
+
+        /** * Generates the 12-character compressed string representing the overtone levels.
+         * @returns {string} The compressed 12-character Base-16 string.
+         */
+        function generateOvertoneString() {
+            return harmonicAmplitudes.slice(0, 12).map(gainToHex).join('');
+        }
+
+        /**
+         * Gathers all state variables required for the consistent filename/wave name structure.
+         */
+        function generateFilenameParts() {
+            // Note Letter (e.g., C4)
+            const noteLetter = midiToNoteName(currentMidiNote).replace('#', 's'); // Replace sharp with 's' for cleaner filename
+            
+            // Waveform Name (e.g., SINE, SQUARE, CUSTOM_1)
+            const waveform = currentWaveform.toUpperCase().replace('_', '-');
+
+            // System Name: Clean the name for the filename (e.g., 'Harmonic_Overtone_Series')
+            const systemName = currentSystem.name.split('.')[1].trim().replace(/[^a-zA-Z0-9_]/g, '');
+            
+            // Overtone Levels (the compressed 12-character hex string)
+            const levels = generateOvertoneString();
+
+            // Subharmonic flag (only included if active)
+            const subharmonicFlag = isSubharmonic ? 'subharmonic' : '';
+            
+            return {
+                noteLetter,
+                waveform,
+                systemName,
+                levels,
+                subharmonicFlag
+            };
+        }
+
+
+        // --- Audio Utility Functions ---
+
+        /**
+         * Generates a PeriodicWave for a band-limited waveform (Square, Sawtooth, or Triangle).
+         */
+        function createBandLimitedWaveform(context, type) {
+            const maxHarmonics = 1024; 
+            const real = new Float32Array(maxHarmonics + 1);
+            const imag = new Float32Array(maxHarmonics + 1);
+
+            for (let n = 1; n <= maxHarmonics; n++) {
+                let amplitude = 0;
+                let sign = 1;
+
+                switch (type) {
+                    case 'square':
+                        if (n % 2 !== 0) {
+                            amplitude = 4 / (Math.PI * n);
+                        }
+                        break;
+                    case 'sawtooth':
+                        amplitude = 2 / (Math.PI * n);
+                        sign = (n % 2 === 0) ? -1 : 1; 
+                        break;
+                    case 'triangle':
+                        if (n % 2 !== 0) {
+                            amplitude = 8 / (Math.PI * Math.PI * n * n);
+                            const k = (n - 1) / 2;
+                            sign = (k % 2 === 0) ? 1 : -1;
+                        }
+                        break;
+                }
+                imag[n] = amplitude * sign;
+            }
+            return context.createPeriodicWave(real, imag, { disableNormalization: false });
+        }
+
+
+        /** Initializes the AudioContext and the audio graph. */
+        function initAudio() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                
+                // Pre-calculate band-limited waveforms
+                blWaveforms.square = createBandLimitedWaveform(audioContext, 'square');
+                blWaveforms.sawtooth = createBandLimitedWaveform(audioContext, 'sawtooth');
+                blWaveforms.triangle = createBandLimitedWaveform(audioContext, 'triangle');
+
+
+                // 1. Dynamics Compressor
+                compressor = audioContext.createDynamicsCompressor();
+                compressor.threshold.setValueAtTime(-12, audioContext.currentTime);
+                compressor.ratio.setValueAtTime(12, audioContext.currentTime);
+
+                // 2. Master Gain Node
+                masterGain = audioContext.createGain();
+                masterGain.gain.setValueAtTime(masterGainValue, audioContext.currentTime); 
+                masterGain.maxGain = 1.0; 
+
+                // Connect the graph
+                compressor.connect(masterGain);
+                masterGain.connect(audioContext.destination);
+            }
+            // Resume context if suspended (needed for some browsers like Chrome)
+            if (audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
+        }
+        
+        /** Calculates the frequency based on the mode (Over/Sub-harmonic). */
+        function calculateFrequency(ratio) {
+            if (isSubharmonic) {
+                return ratio === 0 ? 0 : fundamentalFrequency / ratio;
+            } else {
+                return fundamentalFrequency * ratio;
+            }
+        }
+        
+        /** Starts all oscillators. */
+        function startTone() {
+            initAudio(); 
+            if (isPlaying) return;
+
+            const now = audioContext.currentTime;
+            
+            for (let i = 0; i < harmonicAmplitudes.length; i++) {
+                const ratio = currentSystem.ratios[i];
+                const gainValue = harmonicAmplitudes[i];
+                
+                const osc = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                
+                // --- Waveform Logic: Use PeriodicWave if available, otherwise default to sine ---
+                if (currentWaveform === 'sine') {
+                    osc.type = 'sine';
+                } else if (blWaveforms[currentWaveform]) {
+                    // Use the PeriodicWave object (pre-calculated BL or custom-exported)
+                    osc.setPeriodicWave(blWaveforms[currentWaveform]);
+                } else {
+                    // Fallback to sine if the selected waveform doesn't exist
+                    osc.type = 'sine';
+                }
+                // --- End Waveform Logic ---
+
+                osc.frequency.setValueAtTime(calculateFrequency(ratio), now);
+                // Partial gain is relative to the masterGainValue (which is now controlled by slider)
+                gainNode.gain.setValueAtTime(gainValue * masterGainValue, now); 
+                
+                osc.connect(gainNode);
+                gainNode.connect(compressor);
+                
+                osc.start(now);
+                
+                oscillators.push({ osc, gainNode, ratio });
+            }
+
+            isPlaying = true;
+            document.getElementById('play-button').textContent = "Stop Tone";
+            document.getElementById('play-button').classList.add('playing');
+        }
+
+        /** Stops all oscillators. */
+        function stopTone() {
+            if (!isPlaying || !audioContext) return;
+
+            const now = audioContext.currentTime;
+
+            oscillators.forEach(node => {
+                node.gainNode.gain.setValueAtTime(node.gainNode.gain.value, now);
+                node.gainNode.gain.linearRampToValueAtTime(0.0001, now + 0.05); 
+                node.osc.stop(now + 0.06); 
+                node.osc.disconnect();
+                node.gainNode.disconnect();
+            });
+
+            oscillators = []; 
+            isPlaying = false;
+            document.getElementById('play-button').textContent = "Start Tone";
+            document.getElementById('play-button').classList.remove('playing');
+        }
+
+        /** Updates the frequency and gain of all active oscillators. */
+        function updateAudioProperties() {
+            if (!isPlaying || !audioContext) return;
+
+            const now = audioContext.currentTime;
+
+            // Update Master Gain immediately
+            masterGain.gain.linearRampToValueAtTime(masterGainValue, now + 0.01);
+
+            oscillators.forEach((node, i) => {
+                const ratio = currentSystem.ratios[i];
+                const newFreq = calculateFrequency(ratio); 
+                const newGain = harmonicAmplitudes[i] * masterGainValue; 
+
+                node.osc.frequency.linearRampToValueAtTime(newFreq, now + 0.01);
+                node.gainNode.gain.linearRampToValueAtTime(newGain, now + 0.01);
+            });
+        }
+        
+        // --- Wavetable Generation and Export Functions ---
+
+        function sampleCurrentWaveform() {
+            const buffer = new Float32Array(maxWavetableSize);
+            let maxAmplitude = 0;
+            
+            const p = p5Instance; 
+            
+            if (!p || !p.getWaveValue) {
+                console.error("Wavetable Error: p5 context not initialized or missing getWaveValue function. Skipping sample.");
+                showStatus("Export failed: Visualization is not fully initialized. Try playing the tone first.", 'error');
+                return new Float32Array(0); 
+            }
+            
+            if (!currentSystem || !currentSystem.ratios || harmonicAmplitudes.length === 0) {
+                 console.error("Wavetable Error: Spectral system data is missing or incomplete.");
+                 showStatus("Export failed: Spectral data (ratios/amplitudes) is missing.", 'error');
+                 return new Float32Array(0);
+            }
+            
+            for (let i = 0; i < maxWavetableSize; i++) {
+                const theta = p.map(i, 0, maxWavetableSize, 0, p.TWO_PI);
+                
+                let summedWave = 0;
+                let maxPossibleAmp = 0;
+
+                for (let h = 0; h < harmonicAmplitudes.length; h++) {
+                    const ratio = currentSystem.ratios[h]; 
+                    const amp = harmonicAmplitudes[h];
+                    
+                    summedWave += p.getWaveValue(currentWaveform, ratio * theta) * amp;
+                    maxPossibleAmp += amp;
+                }
+                
+                buffer[i] = summedWave;
+                maxAmplitude = Math.max(maxAmplitude, Math.abs(summedWave));
+            }
+
+            if (maxAmplitude > 0) {
+                const normalizationFactor = 1.0 / maxAmplitude;
+                for (let i = 0; i < maxWavetableSize; i++) {
+                    buffer[i] *= normalizationFactor;
+                }
+            }
+            
+            return buffer;
+        }
+
+        function exportAsWAV(buffer, numCycles) {
+            if (!audioContext) {
+                showStatus("Error: Audio system not initialized. Please click 'Start Tone' first.", 'error');
+                return;
+            }
+            if (buffer.length === 0) {
+                 showStatus("WAV Export Failed: Cannot export empty waveform data.", 'error');
+                 return;
+            }
+            
+            const sampleRate = audioContext.sampleRate;
+            const cycleLength = buffer.length;
+            const totalLength = cycleLength * numCycles;
+            const fullBuffer = new Float32Array(totalLength);
+            
+            for (let i = 0; i < totalLength; i++) {
+                fullBuffer[i] = buffer[i % cycleLength];
+            }
+
+            // --- NEW FILENAME GENERATION ---
+            const parts = generateFilenameParts();
+            const filename = [
+                parts.noteLetter,
+                parts.waveform,
+                parts.systemName,
+                parts.levels,
+                parts.subharmonicFlag
+            ].filter(Boolean).join('-'); 
+            // --- END NEW FILENAME GENERATION ---
+
+
+            // --- WAV Header Generation (Standard for 16-bit PCM Mono) ---
+            const bufferLen = fullBuffer.length;
+            const numOfChan = 1;
+            const bytesPerSample = 2; // 16-bit
+            const blockAlign = numOfChan * bytesPerSample;
+            const byteRate = sampleRate * blockAlign;
+            const dataSize = bufferLen * bytesPerSample;
+            const fileSize = 36 + dataSize;
+            
+            const arrayBuffer = new ArrayBuffer(fileSize + 8); 
+            const view = new DataView(arrayBuffer);
+
+            // Write RIFF chunk
+            writeString(view, 0, 'RIFF');
+            view.setUint32(4, fileSize, true); // Little-endian
+            writeString(view, 8, 'WAVE');
+
+            // Write FMT chunk
+            writeString(view, 12, 'fmt ');
+            view.setUint32(16, 16, true);          // Sub-chunk size
+            view.setUint16(20, 1, true);           // PCM format
+            view.setUint16(22, numOfChan, true);   // Mono
+            view.setUint32(24, sampleRate, true);
+            view.setUint32(28, byteRate, true);
+            view.setUint16(32, blockAlign, true);
+            view.setUint16(34, 16, true);          // 16 bits per sample
+
+            // Write DATA chunk
+            writeString(view, 36, 'data');
+            view.setUint32(40, dataSize, true);
+
+            // Write the actual audio data (converted to 16-bit integer)
+            let offset = 44;
+            for (let i = 0; i < bufferLen; i++, offset += 2) {
+                const s = Math.max(-1, Math.min(1, fullBuffer[i]));
+                view.setInt16(offset, s * 0x7FFF, true);
+            }
+
+            // Create and download the Blob
+            const blob = new Blob([view], { type: 'audio/wav' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${filename}.wav`; // Use the new generated filename
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            showStatus(`Wavetable exported as ${a.download}!`, 'success');
+        }
+
+        function writeString(view, offset, string) {
+            for (let i = 0; i < string.length; i++) {
+                view.setUint8(offset + i, string.charCodeAt(i));
+            }
+        }
+        
+        function addToWaveforms(sampledBuffer) {
+            initAudio(); 
+            if (sampledBuffer.length === 0) {
+                 showStatus("Warning: Cannot add empty waveform data.", 'warning');
+                 return;
+            }
+
+            const real = new Float32Array(maxWavetableSize).fill(0);
+            const imag = sampledBuffer; 
+            
+            const customWave = audioContext.createPeriodicWave(real, imag, { disableNormalization: false });
+            customWaveCount++;
+            const waveKey = `custom_${customWaveCount}`;
+            blWaveforms[waveKey] = customWave;
+
+            // --- NEW UI NAME GENERATION ---
+            const parts = generateFilenameParts();
+            const optionName = `${parts.noteLetter}-${parts.waveform}-${parts.systemName}-${parts.levels}` + (parts.subharmonicFlag ? `-${parts.subharmonicFlag}` : '');
+
+            // 2. Add to UI
+            const select = document.getElementById('waveform-select');
+            const option = document.createElement('option');
+            option.textContent = `Custom ${customWaveCount}: ${optionName}`;
+            option.value = waveKey;
+            select.appendChild(option);
+            
+            // 3. Select the new waveform automatically
+            currentWaveform = waveKey;
+            select.value = waveKey;
+            
+            showStatus(`Successfully added new waveform: ${option.textContent}. Now synthesizing with it!`, 'success');
+
+            if (isPlaying) { 
+                stopTone(); 
+                setTimeout(startTone, 50); 
+            }
+        }
+
+        // --- P5 Sketch Integration (Visualization) ---
+
+        let toneWheelSketch = function(p) {
+            let spreadFactor = 0.2; 
+            let baseRadius;
+            let maxAmplitudeRadial;
+            
+            const CANVAS_H_RATIO = {
+                RADIAL: 0.55,
+                SPECTROGRAPH: 0.15,
+                OSCILLOSCOPE: 0.30
+            };
+
+            const VISUAL_HARMONIC_TERMS = 7; 
+            const baseRadiusRatio = 0.25; 
+            const harmonicColors = [
+                '#10b981', '#fcd34d', '#3b82f6', '#ef4444', 
+                '#a855f7', '#f97316', '#22c55e', '#ec4899',
+                '#84cc16', '#eab308', '#7c3aed', '#6d28d9'
+            ];
+            
+            p.setup = function() {
+                const container = document.getElementById('canvas-container');
+                let w = container.clientWidth;
+                let h = window.innerWidth < 640 ? 500 : 700; 
+                
+                p.createCanvas(w, h).parent('canvas-container');
+                p.angleMode(p.RADIANS);
+                
+                p5Instance = p; 
+
+                p.updateDimensions(); 
+                p.setupControls();
+                p.updateUIOnSystemChange();
+                p.updateKeyboardUI(); // Initialize keyboard UI
+                showStatus("Visualization initialized. Ready to play and export.", 'info');
+            };
+            
+            p.updateDimensions = function() {
+                const radialHeight = p.height * CANVAS_H_RATIO.RADIAL;
+                maxAmplitudeRadial = p.min(p.width, radialHeight) * (1 - baseRadiusRatio) * 0.45; 
+                baseRadius = p.min(p.width, radialHeight) * baseRadiusRatio;
+            }
+
+            p.getWaveValue = function(type, theta) {
+                if (type.startsWith('custom')) {
+                    // When using a custom PeriodicWave, the visualization just shows a sine wave
+                    // as we can't easily reverse-engineer the complex waveform from the PeriodicWave object.
+                    return p.sin(theta);
+                }
+                
+                if (type === 'sine') {
+                    return p.sin(theta);
+                }
+                
+                let sum = 0;
+                let multiplier = 1;
+
+                if (type === 'square') {
+                    for (let n = 1; n < VISUAL_HARMONIC_TERMS * 2; n += 2) {
+                        sum += (1 / n) * p.sin(theta * n);
+                        multiplier = 4 / p.PI;
+                    }
+                } else if (type === 'sawtooth') {
+                    for (let n = 1; n <= VISUAL_HARMONIC_TERMS; n++) {
+                        sum += (1 / n) * p.sin(theta * n);
+                        multiplier = 2 / p.PI;
+                    }
+                } else if (type === 'triangle') {
+                    for (let n = 1; n < VISUAL_HARMONIC_TERMS * 2; n += 2) {
+                        const sign = ((n - 1) / 2) % 2 === 0 ? 1 : -1;
+                        sum += (sign / (n * n)) * p.sin(theta * n);
+                        multiplier = 8 / (p.PI * p.PI);
+                    }
+                }
+
+                return sum * multiplier * 0.7; 
+            }
+
+            function drawRadialDisplay() {
+                const radialHeight = p.height * CANVAS_H_RATIO.RADIAL;
+                
+                p.push();
+                p.translate(p.width / 2, radialHeight / 2); 
+
+                p.noFill();
+                p.stroke('#374151');
+                p.ellipse(0, 0, baseRadius * 2, baseRadius * 2);
+
+                const points = 360; 
+                let rotationSpeed = 0.01; 
+                let currentAngle = p.frameCount * rotationSpeed;
+
+                // 1. Draw Individual Partials
+                for (let h = 0; h < harmonicAmplitudes.length; h++) {
+                    const ratio = currentSystem.ratios[h];
+                    const amp = harmonicAmplitudes[h] * maxAmplitudeRadial * (1 / 12); 
+                    const normalizedIndex = h / (harmonicAmplitudes.length - 1);
+                    const radialOffset = maxAmplitudeRadial * spreadFactor * (normalizedIndex * normalizedIndex * 0.6 + normalizedIndex * 0.4); 
+
+                    if (amp > 0.005) { 
+                        p.stroke(p.color(harmonicColors[h] + '99')); 
+                        p.strokeWeight(1.5);
+                        p.noFill();
+                        p.beginShape();
+                        
+                        let totalRadialBase = baseRadius + radialOffset;
+
+                        let visualizationRatio = ratio; 
+                        let visualAmpScale = isSubharmonic ? (1 / ratio) : ratio;
+
+                        for (let i = 0; i <= points; i++) {
+                            let theta = p.map(i, 0, points, 0, p.TWO_PI);
+                            
+                            let waveValue = p.getWaveValue(currentWaveform, visualizationRatio * theta + currentAngle);
+                            
+                            let r = totalRadialBase + waveValue * amp * visualAmpScale * 0.5;
+                            
+                            let x = r * p.cos(theta);
+                            let y = r * p.sin(theta);
+                            p.vertex(x, y);
+                        }
+                        p.endShape();
+                    }
+                }
+
+                // 2. Draw the Final Summed Waveform
+                p.stroke('#e5e7eb'); 
+                p.strokeWeight(3.5);
+                p.fill('#10b98125'); 
+                
+                p.beginShape();
+                for (let i = 0; i <= points; i++) {
+                    let theta = p.map(i, 0, points, 0, p.TWO_PI);
+                    
+                    let r = baseRadius;
+                    for (let h = 0; h < harmonicAmplitudes.length; h++) {
+                        const ratio = currentSystem.ratios[h];
+                        const amp = harmonicAmplitudes[h] * maxAmplitudeRadial; 
+                        
+                        r += p.getWaveValue(currentWaveform, ratio * theta + currentAngle) * amp / (ratio * 2); 
+                    }
+
+                    let x = r * p.cos(theta);
+                    let y = r * p.sin(theta);
+                    p.vertex(x, y);
+                }
+                p.endShape(p.CLOSE);
+
+                p.pop(); 
+            }
+
+            function drawSpectrograph() {
+                const specHeight = p.height * CANVAS_H_RATIO.SPECTROGRAPH;
+                const specY = p.height * CANVAS_H_RATIO.RADIAL;
+                const padding = 10;
+                const barWidth = 15;
+                const maxBarHeight = specHeight - 2 * padding;
+
+                p.push();
+                p.translate(0, specY);
+
+                p.fill('#2b333e');
+                p.noStroke();
+                p.rect(0, 0, p.width, specHeight, 0, 0, 0.5 * padding, 0.5 * padding);
+                p.fill('#f3f4f6');
+                p.textAlign(p.LEFT, p.TOP);
+                p.textSize(10);
+                p.text('Logarithmic Spectrograph (Amplitude of 12 Partials)', padding, padding / 2);
+
+                const minRatio = 1; 
+                const maxRatio = currentSystem.ratios.reduce((max, r) => Math.max(max, r), 0);
+                const logMin = p.log(minRatio);
+                const logMax = p.log(maxRatio > 1 ? maxRatio : 10); 
+
+                function mapRatioToX(ratio) {
+                    if (ratio <= 0) return padding;
+                    const logRatio = p.log(ratio);
+                    return p.map(logRatio, logMin, logMax, padding, p.width - padding);
+                }
+
+                p.noFill();
+                p.stroke(255, 50);
+
+                for (let i = 0; i < harmonicAmplitudes.length; i++) {
+                    const ratio = currentSystem.ratios[i];
+                    const amplitude = harmonicAmplitudes[i];
+                    const x = mapRatioToX(ratio);
+                    const h = amplitude * maxBarHeight;
+
+                    p.fill(p.color(harmonicColors[i]));
+                    p.noStroke();
+                    p.rect(x - barWidth / 2, specHeight - padding, barWidth, -h, 3);
+                    
+                    p.fill('#d1d5db');
+                    p.textAlign(p.CENTER, p.BOTTOM);
+                    p.textSize(9);
+                    p.text(currentSystem.ratios[i].toFixed(1), x, specHeight - h - 5);
+                }
+                
+                p.stroke('#4b5563');
+                p.line(padding, specHeight - padding, p.width - padding, specHeight - padding);
+
+                p.pop();
+            }
+
+            function drawOscilloscope() {
+                const oscHeight = p.height * CANVAS_H_RATIO.OSCILLOSCOPE;
+                const oscY = p.height * (CANVAS_H_RATIO.RADIAL + CANVAS_H_RATIO.SPECTROGRAPH);
+                const ampScale = oscHeight * 0.4;
+                const points = p.width; 
+
+                p.push();
+                p.translate(0, oscY);
+
+                p.fill('#1f2937');
+                p.noStroke();
+                p.rect(0, 0, p.width, oscHeight, 0.5 * 10, 0.5 * 10, 0, 0);
+
+                p.stroke('#374151');
+                p.strokeWeight(1);
+                p.line(0, oscHeight / 2, p.width, oscHeight / 2);
+
+                p.fill('#f3f4f6');
+                p.textAlign(p.LEFT, p.TOP);
+                p.textSize(10);
+                p.text('Linear Waveform (Oscilloscope View)', 10, 5);
+
+                p.stroke('#10b981');
+                p.strokeWeight(2.5);
+                p.noFill();
+                p.beginShape();
+
+                for (let x = 0; x < points; x++) {
+                    let theta = p.map(x, 0, points, 0, p.TWO_PI);
+                    
+                    let summedWave = 0;
+                    let maxPossibleAmp = 0;
+
+                    for (let h = 0; h < harmonicAmplitudes.length; h++) {
+                        const ratio = currentSystem.ratios[h];
+                        const amp = harmonicAmplitudes[h];
+                        
+                        summedWave += p.getWaveValue(currentWaveform, ratio * theta) * amp;
+                        maxPossibleAmp += amp;
+                    }
+                    
+                    const normalizedWave = summedWave / (maxPossibleAmp || 1); 
+
+                    let y = oscHeight / 2 - normalizedWave * ampScale;
+                    p.vertex(x, y);
+                }
+                p.endShape();
+                p.pop();
+            }
+
+            // --- P5 Draw Loop ---
+            p.draw = function() {
+                p.background('#0d131f');
+                p.updateDimensions();
+                
+                drawRadialDisplay();
+                drawSpectrograph();
+                drawOscilloscope();
+            };
+
+            // --- UI Handlers ---
+            
+            p.updateFundamental = function(newMidi) {
+                currentMidiNote = Math.max(0, Math.min(127, newMidi)); // Clamp to standard MIDI range
+                fundamentalFrequency = midiToFreq(currentMidiNote);
+                
+                // Update UI elements
+                document.getElementById('fundamental-input').value = fundamentalFrequency.toFixed(2);
+                document.getElementById('current-octave-display').textContent = `Octave ${currentOctave}`;
+                
+                // Update keyboard visual state
+                p.updateKeyboardUI();
+
+                // Restart tone to apply new frequency
+                if (isPlaying) { stopTone(); setTimeout(startTone, 50); }
+                updateAudioProperties();
+            }
+
+            p.updateKeyboardUI = function() {
+                const keys = document.querySelectorAll('.key');
+                keys.forEach(key => key.classList.remove('active'));
+
+                // Calculate the index (0-11) of the selected note within the current octave
+                const noteIndex = (currentMidiNote % 12); 
+                
+                // C3 (MIDI 48) is the base for Octave 3.
+                currentOctave = Math.floor(currentMidiNote / 12) - 1; // Standard Western MIDI Octave labeling (C4=60)
+                
+                let selectedKey;
+
+                // Select the key based on the note index
+                selectedKey = document.querySelector(`.key[data-note-index="${noteIndex}"]`);
+                
+                if (selectedKey) {
+                    selectedKey.classList.add('active');
+                }
+
+                document.getElementById('current-octave-display').textContent = `Octave ${currentOctave}`;
+            };
+
+
+            p.handleKeyClick = function(noteIndex) {
+                // noteIndex is 0 (C) through 11 (B)
+                const baseMidi = (currentOctave + 1) * 12;
+                const newMidi = baseMidi + noteIndex;
+
+                p.updateFundamental(newMidi);
+            };
+
+            const handleExportWAV = () => {
+                initAudio();
+                const sampledBuffer = sampleCurrentWaveform();
+                
+                if (sampledBuffer.length === 0) {
+                    return; 
+                }
+                
+                exportAsWAV(sampledBuffer, 1);
+            };
+
+            const handleAddToWaveforms = () => {
+                const sampledBuffer = sampleCurrentWaveform();
+                
+                if (sampledBuffer.length === 0) {
+                    return; 
+                }
+                
+                addToWaveforms(sampledBuffer);
+            };
+
+
+            p.updateDrawbarLabels = function() {
+                const ratioElements = document.querySelectorAll('.drawbar-label');
+                currentSystem.ratios.forEach((ratio, index) => {
+                    if (ratioElements[index]) {
+                        const preciseRatio = ratio.toFixed(currentSystem.labelPrecision);
+                        let labelText;
+                        if (isSubharmonic) {
+                            labelText = `1/${preciseRatio}x`;
+                        } else {
+                            labelText = `${preciseRatio}x`;
+                        }
+                        ratioElements[index].textContent = labelText;
+                    }
+                });
+            };
+
+            p.updateUIOnSystemChange = function() {
+                document.getElementById('system-description').textContent = currentSystem.description;
+                p.updateDrawbarLabels();
+                updateAudioProperties(); 
+            }
+
+            p.setupKeyboard = function() {
+                const keyboard = document.getElementById('piano-keyboard');
+                
+                // Define the 12 chromatic notes (C to B)
+                const notes = [
+                    { name: 'C', class: 'white', index: 0 },
+                    { name: 'C#', class: 'black', index: 1 },
+                    { name: 'D', class: 'white', index: 2 },
+                    { name: 'D#', class: 'black', index: 3 },
+                    { name: 'E', class: 'white', index: 4 },
+                    { name: 'F', class: 'white', index: 5 },
+                    { name: 'F#', class: 'black', index: 6 },
+                    { name: 'G', class: 'white', index: 7 },
+                    { name: 'G#', class: 'black', index: 8 },
+                    { name: 'A', class: 'white', index: 9 },
+                    { name: 'A#', class: 'black', index: 10 },
+                    { name: 'B', class: 'white', index: 11 },
+                ];
+
+                notes.forEach(note => {
+                    const key = document.createElement('div');
+                    key.className = `key ${note.class}`;
+                    key.textContent = note.name;
+                    key.dataset.noteIndex = note.index; // 0-11
+                    key.addEventListener('click', () => p.handleKeyClick(note.index));
+                    keyboard.appendChild(key);
+                });
+
+                // Octave controls
+                document.getElementById('octave-down').addEventListener('click', () => {
+                    if (currentOctave > 0) {
+                        currentOctave--;
+                        p.updateFundamental(currentMidiNote - 12);
+                    } else {
+                        showStatus("Cannot go below Octave 0.", 'warning');
+                    }
+                });
+
+                document.getElementById('octave-up').addEventListener('click', () => {
+                    if (currentOctave < 8) {
+                        currentOctave++;
+                        p.updateFundamental(currentMidiNote + 12);
+                    } else {
+                        showStatus("Cannot go above Octave 8.", 'warning');
+                    }
+                });
+            }
+
+            p.setupControls = function() {
+                // 1. Setup Keyboard UI and Logic
+                p.setupKeyboard();
+                
+                // 2. Set initial fundamental (C3)
+                // We use the MIDI note that corresponds to the initial frequency (130.81 Hz ~ C3)
+                currentMidiNote = Math.round(freqToMidi(fundamentalFrequency));
+                currentOctave = Math.floor(currentMidiNote / 12) - 1; // C3 is MIDI 48
+                p.updateKeyboardUI();
+
+                // --- Master Play Button ---
+                document.getElementById('play-button').addEventListener('click', () => {
+                    if (isPlaying) {
+                        stopTone();
+                    } else {
+                        startTone();
+                    }
+                });
+
+                // --- Direct Action Buttons ---
+                document.getElementById('export-wav-button').addEventListener('click', handleExportWAV);
+                document.getElementById('add-wave-button').addEventListener('click', handleAddToWaveforms);
+
+                // --- Master Gain Control ---
+                const masterGainSlider = document.getElementById('master-gain-slider');
+                const masterGainValueDisplay = document.getElementById('master-gain-value');
+
+                masterGainSlider.addEventListener('input', (e) => {
+                    masterGainValue = parseFloat(e.target.value);
+                    masterGainValueDisplay.textContent = `${(masterGainValue * 100).toFixed(0)}%`;
+                    updateAudioProperties(); 
+                });
+                
+                // --- Subharmonic Toggle ---
+                const subharmonicToggle = document.getElementById('subharmonic-toggle');
+                const subharmonicLabel = document.getElementById('subharmonic-label');
+                const overtoneLabel = subharmonicToggle.previousElementSibling;
+
+                subharmonicToggle.addEventListener('click', () => {
+                    isSubharmonic = !isSubharmonic;
+                    subharmonicToggle.classList.toggle('active', isSubharmonic);
+                    subharmonicToggle.setAttribute('aria-checked', isSubharmonic);
+
+                    if (isSubharmonic) {
+                        subharmonicLabel.classList.add('text-green-400');
+                        subharmonicLabel.classList.remove('text-gray-400');
+                        overtoneLabel.classList.remove('text-red-400');
+                        overtoneLabel.classList.add('text-gray-400');
+                    } else {
+                        subharmonicLabel.classList.remove('text-green-400');
+                        subharmonicLabel.classList.add('text-gray-400');
+                        overtoneLabel.classList.add('text-red-400');
+                        overtoneLabel.classList.remove('text-gray-400');
+                    }
+
+                    if (isPlaying) { stopTone(); setTimeout(startTone, 50); }
+                    p.updateUIOnSystemChange();
+                });
+
+                // --- Waveform Selector ---
+                const waveformSelect = document.getElementById('waveform-select');
+                waveformSelect.addEventListener('change', (e) => {
+                    currentWaveform = e.target.value;
+                    if (isPlaying) {
+                        stopTone();
+                        setTimeout(startTone, 50);
+                    }
+                });
+
+
+                // --- Fundamental Frequency (Hz Input) ---
+                const fundamentalInput = document.getElementById('fundamental-input');
+                
+                fundamentalInput.addEventListener('change', (e) => {
+                    let val = parseFloat(e.target.value);
+                    if (isNaN(val) || val < 10 || val > 10000) { 
+                        showStatus("Frequency must be between 10 Hz and 10000 Hz.", 'error');
+                        val = fundamentalFrequency; // Revert to current value
+                    }
+                    fundamentalFrequency = val;
+                    e.target.value = fundamentalFrequency.toFixed(2);
+                    
+                    // Update MIDI note and keyboard selection
+                    currentMidiNote = Math.round(freqToMidi(fundamentalFrequency));
+                    currentOctave = Math.floor(currentMidiNote / 12) - 1;
+                    p.updateKeyboardUI();
+
+                    updateAudioProperties();
+                });
+
+
+                // --- Spread Control ---
+                const spreadSlider = document.getElementById('spread-slider');
+                spreadFactor = parseFloat(spreadSlider.value);
+                spreadSlider.addEventListener('input', (e) => {
+                    spreadFactor = parseFloat(e.target.value);
+                });
+
+                // --- Ratio System Dropdown ---
+                const selectElement = document.getElementById('ratio-system-select');
+                
+                spectralSystems.forEach((system, index) => {
+                    const option = document.createElement('option');
+                    option.textContent = system.name;
+                    option.value = index;
+                    selectElement.appendChild(option);
+                });
+
+                selectElement.addEventListener('change', (e) => {
+                    currentSystem = spectralSystems[parseInt(e.target.value)];
+                    if (isPlaying) { stopTone(); setTimeout(startTone, 50); }
+                    p.updateUIOnSystemChange();
+                });
+
+
+                // --- Drawbars ---
+                const drawbarsContainer = document.getElementById('drawbars');
+                
+                for (let i = 0; i < harmonicAmplitudes.length; i++) {
+                    const styleClass = drawbarStyles[i];
+                    const initialValue = harmonicAmplitudes[i];
+
+                    const drawbarDiv = document.createElement('div');
+                    drawbarDiv.className = `drawbar ${styleClass}`;
+                    
+                    const labelSpan = document.createElement('span');
+                    labelSpan.className = 'drawbar-label'; 
+                    
+                    const inputWrapper = document.createElement('div');
+                    inputWrapper.className = 'drawbar-input-wrapper';
+                    
+                    const trackDiv = document.createElement('div');
+                    trackDiv.className = 'drawbar-track';
+                    
+                    const input = document.createElement('input');
+                    input.type = 'range';
+                    input.className = 'vertical';
+                    input.min = '0';
+                    input.max = '1';
+                    input.step = '0.01';
+                    input.value = initialValue;
+                    input.dataset.index = i;
+                    
+                    input.addEventListener('input', (e) => {
+                        const index = parseInt(e.target.dataset.index);
+                        harmonicAmplitudes[index] = parseFloat(e.target.value);
+                        updateAudioProperties();
+                    });
+
+                    inputWrapper.appendChild(trackDiv);
+                    inputWrapper.appendChild(input);
+                    drawbarDiv.appendChild(labelSpan);
+                    drawbarDiv.appendChild(inputWrapper);
+                    drawbarsContainer.appendChild(drawbarDiv);
+                }
+            };
+
+            // --- Responsiveness ---
+            p.windowResized = function() {
+                const container = document.getElementById('canvas-container');
+                let w = container.clientWidth;
+                let h = window.innerWidth < 640 ? 500 : 700;
+                
+                p.resizeCanvas(w, h);
+                p.updateDimensions();
+            };
+        };
+
+        // Initialize the p5 sketch
+        new p5(toneWheelSketch);
+    </script>
+</body>
+</html>
