@@ -1,0 +1,596 @@
+/* ================================
+   SPECTRAL AUDIO SYNTHESIZER STYLES
+   ================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+
+/* ================================
+   BASE STYLES
+   ================================ */
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: #1f2937;
+    color: #f3f4f6;
+    min-height: 100vh;
+    margin: 0;
+    padding: 1rem;
+}
+
+@media (min-width: 640px) {
+    body {
+        padding: 2rem;
+    }
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+/* ================================
+   TYPOGRAPHY
+   ================================ */
+
+.main-title {
+    font-size: 1.5rem;
+    font-weight: 800;
+    margin-bottom: 1.5rem;
+    text-align: center;
+    color: #5eead4;
+}
+
+@media (min-width: 640px) {
+    .main-title {
+        font-size: 1.875rem;
+    }
+}
+
+/* ================================
+   CANVAS & VISUALIZATION
+   ================================ */
+
+.canvas-container {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 1.5rem;
+    width: 100%;
+    min-width: 800px;
+}
+
+canvas {
+    border: 2px solid #4b5563;
+    border-radius: 1rem;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+    background-color: #0d131f;
+}
+
+/* ================================
+   BUTTON COMPONENTS
+   ================================ */
+
+.btn {
+    padding: 0.75rem 1.5rem;
+    border-radius: 0.5rem;
+    font-weight: 600;
+    transition: all 0.2s ease;
+    cursor: pointer;
+    border: none;
+    font-size: 1rem;
+}
+
+.btn:hover {
+    transform: translateY(-1px);
+    filter: brightness(1.1);
+}
+
+.btn-play {
+    background-color: #ef4444;
+    color: white;
+    font-weight: bold;
+}
+
+.btn-play.playing {
+    background-color: #10b981;
+}
+
+.btn-export {
+    background-color: #3b82f6;
+    color: white;
+}
+
+.btn-add-wave {
+    background-color: #10b981;
+    color: white;
+}
+
+.btn-octave {
+    background-color: #1f2937;
+    color: #a8a29e;
+    padding: 0.5rem 1rem;
+    font-weight: 700;
+}
+
+.btn-octave:hover {
+    background-color: #4b5563;
+    color: white;
+}
+
+/* ================================
+   BUTTON GROUPS
+   ================================ */
+
+.button-group {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.button-group .btn {
+    flex-grow: 1;
+}
+
+@media (min-width: 640px) {
+    .button-group .btn {
+        flex-grow: 0;
+    }
+}
+
+/* ================================
+   CONTROL CARDS & LAYOUTS
+   ================================ */
+
+.control-card {
+    background-color: #374151;
+    border-radius: 0.75rem;
+    padding: 1rem;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin-top: 1.5rem;
+    width: 100%;
+}
+
+.control-row {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+@media (min-width: 640px) {
+    .control-row {
+        flex-direction: row;
+    }
+}
+
+.labeled-control {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 0.5rem 1rem;
+    background-color: #2b333e;
+    border-radius: 0.5rem;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.labeled-control label {
+    font-weight: 700;
+    color: #93c5fd;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.25rem;
+    font-size: 0.9rem;
+}
+
+.frequency-control-group {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+/* ================================
+   INPUT CONTROLS
+   ================================ */
+
+.control-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 8px;
+    background: #1f2937;
+    border-radius: 4px;
+    margin-top: 0.5rem;
+    padding: 0;
+    cursor: pointer;
+    width: 100%;
+}
+
+.control-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    background: #10b981;
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+.control-select {
+    background-color: #1f2937;
+    color: #f3f4f6;
+    border: 1px solid #4b5563;
+    padding: 0.5rem;
+    border-radius: 0.375rem;
+    font-size: 1rem;
+    cursor: pointer;
+    width: 100%;
+}
+
+.fundamental-input-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.fundamental-input {
+    background-color: #1f2937;
+    color: #f3f4f6;
+    border: 1px solid #4b5563;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.375rem;
+    width: 80px;
+    text-align: right;
+}
+
+/* ================================
+   KEYBOARD COMPONENT
+   ================================ */
+
+.keyboard-container {
+    position: relative;
+    height: 100px;
+    display: flex;
+    justify-content: center;
+    margin: 10px 0;
+}
+
+.key {
+    position: relative;
+    height: 100px;
+    cursor: pointer;
+    border: 1px solid #1f2937;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.4);
+    transition: all 0.05s ease;
+    z-index: 1;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding-bottom: 5px;
+    font-size: 0.75rem;
+}
+
+.key.white {
+    background-color: #f3f4f6;
+    width: 40px;
+    margin-right: -1px;
+    border-radius: 0 0 5px 5px;
+    color: #1f2937;
+    z-index: 1;
+}
+
+.key.black {
+    background-color: #1f2937;
+    width: 25px;
+    height: 60px;
+    margin-left: -12px;
+    margin-right: -12px;
+    z-index: 2;
+    color: #f3f4f6;
+    padding-bottom: 3px;
+}
+
+.key.active {
+    box-shadow: 0 0 15px #10b981;
+    transform: scale(0.98);
+}
+
+.key.white.active {
+    background-color: #d1fae5;
+}
+
+.key.black.active {
+    background-color: #065f46;
+}
+
+.octave-control {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 10px;
+    margin: 0.5rem 0;
+}
+
+.octave-display {
+    font-weight: bold;
+    font-size: 1.125rem;
+    color: #c7d2fe;
+}
+
+/* ================================
+   SYSTEM SELECTOR & TOGGLES
+   ================================ */
+
+.system-control-group {
+    background-color: #2b333e;
+    border-radius: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+}
+
+.system-selector label {
+    font-size: 1.125rem;
+    font-weight: bold;
+    color: #c7d2fe;
+}
+
+.system-description {
+    font-size: 0.875rem;
+    color: #9ca3af;
+    padding: 0.5rem 0;
+}
+
+.subharmonic-toggle-container {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 1rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid #4b5563;
+}
+
+.toggle {
+    cursor: pointer;
+    width: 3.5rem;
+    height: 1.5rem;
+    border-radius: 0.75rem;
+    background-color: #ef4444;
+    transition: background-color 0.2s;
+    position: relative;
+}
+
+.toggle.active {
+    background-color: #10b981;
+}
+
+.toggle::before {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 1.1rem;
+    height: 1.1rem;
+    border-radius: 50%;
+    background-color: white;
+    transition: transform 0.2s;
+}
+
+.toggle.active::before {
+    transform: translateX(2rem);
+}
+
+.toggle-label {
+    font-weight: 700;
+    color: #f3f4f6;
+    text-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+}
+
+.toggle-label.inactive {
+    color: #9ca3af;
+}
+
+.toggle-label.active {
+    color: #10b981;
+}
+
+.toggle-label.overtone {
+    color: #ef4444;
+}
+
+/* ================================
+   DRAWBAR CONTROLS
+   ================================ */
+
+.drawbar-container {
+    display: flex;
+    gap: 0.5rem;
+    padding: 10px 0;
+    overflow-x: auto;
+    max-width: 100%;
+    justify-content: center;
+}
+
+.drawbar {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 44px;
+    flex-shrink: 0;
+}
+
+.drawbar-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-align: center;
+    height: 20px;
+    margin-bottom: 5px;
+    color: #d1d5db;
+}
+
+.drawbar-input-wrapper {
+    position: relative;
+    height: 140px;
+    width: 25px;
+    margin: 10px 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.drawbar-track {
+    position: absolute;
+    width: 8px;
+    height: 100%;
+    background: #2b333e;
+    border-radius: 4px;
+}
+
+.drawbar-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 140px;
+    height: 25px;
+    margin: 0;
+    padding: 0;
+    cursor: pointer;
+    background: transparent;
+    transform: rotate(-90deg);
+    transform-origin: center;
+}
+
+.drawbar-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 35px;
+    height: 20px;
+    border-radius: 4px;
+    border: none;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.6);
+    cursor: grab;
+}
+
+/* ================================
+   DRAWBAR COLOR THEMES
+   ================================ */
+
+.drawbar.brown .drawbar-slider::-webkit-slider-thumb {
+    background: #8d624a;
+}
+
+.drawbar.brown .drawbar-label {
+    color: #d1b4a0;
+}
+
+.drawbar.white .drawbar-slider::-webkit-slider-thumb {
+    background: #e0e0e0;
+}
+
+.drawbar.white .drawbar-label {
+    color: #f3f4f6;
+}
+
+.drawbar.black .drawbar-slider::-webkit-slider-thumb {
+    background: #333333;
+}
+
+.drawbar.black .drawbar-label {
+    color: #a0a0a0;
+}
+
+.drawbar.blue .drawbar-slider::-webkit-slider-thumb {
+    background: #3b82f6;
+}
+
+.drawbar.red .drawbar-slider::-webkit-slider-thumb {
+    background: #ef4444;
+}
+
+/* ================================
+   STATUS MESSAGES
+   ================================ */
+
+.status-message {
+    position: fixed;
+    bottom: 1rem;
+    right: 1rem;
+    color: white;
+    padding: 0.75rem;
+    border-radius: 0.5rem;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+    font-weight: 600;
+    max-width: 300px;
+    z-index: 1000;
+}
+
+.status-message.hidden {
+    display: none;
+}
+
+.status-message.error {
+    background-color: #dc2626;
+}
+
+.status-message.success {
+    background-color: #059669;
+}
+
+.status-message.warning {
+    background-color: #d97706;
+}
+
+.status-message.info {
+    background-color: #2563eb;
+}
+
+/* ================================
+   UTILITY CLASSES
+   ================================ */
+
+.text-center {
+    text-align: center;
+}
+
+.text-sm {
+    font-size: 0.75rem;
+}
+
+.text-gray {
+    color: #9ca3af;
+}
+
+.mt-2 {
+    margin-top: 0.5rem;
+}
+
+.mb-2 {
+    margin-bottom: 0.5rem;
+}
+
+/* ================================
+   RESPONSIVE BREAKPOINTS
+   ================================ */
+
+@media (max-width: 639px) {
+    .drawbar-container {
+        justify-content: flex-start;
+        padding-left: 1rem;
+    }
+    
+    .control-row {
+        gap: 0.75rem;
+    }
+}

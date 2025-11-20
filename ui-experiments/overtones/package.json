@@ -1,0 +1,22 @@
+{
+  "name": "spectral-audio-synthesizer",
+  "version": "1.0.0",
+  "description": "Web-based spectral audio synthesizer with overtone harmonic series",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  },
+  "keywords": [
+    "audio",
+    "synthesizer",
+    "spectral",
+    "overtones",
+    "webaudio"
+  ],
+  "author": "",
+  "license": "MIT"
+}
