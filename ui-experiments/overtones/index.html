@@ -395,7 +395,10 @@
 
                 <!-- Visualization Spread Control -->
                 <div class="labeled-control">
-                    <label for="spread-slider">Visualization Spread</label>
+                    <label for="spread-slider">
+                        Harmonic Spread 
+                        <span id="spread-value">20%</span>
+                    </label>
                     <input type="range" id="spread-slider" min="0" max="1" step="0.01" value="0.2">
                 </div>
 
@@ -1019,14 +1022,13 @@
         // --- P5 Sketch Integration (Visualization) ---
 
         let toneWheelSketch = function(p) {
-            let spreadFactor = 0.5; 
+            let spreadFactor = 0.2; // Match the default slider value
             let baseRadius;
             let maxAmplitudeRadial;
             
             const CANVAS_H_RATIO = {
-                RADIAL: 0.55,
-                SPECTROGRAPH: 0.15,
-                OSCILLOSCOPE: 0.30
+                RADIAL: 0.75,        // Increased from 0.70, taking some space from removed spectrograph
+                OSCILLOSCOPE: 0.25   // Increased from 0.15, taking remaining space from removed spectrograph
             };
 
             const VISUAL_HARMONIC_TERMS = 7; 
@@ -1123,8 +1125,34 @@
                 for (let h = 0; h < harmonicAmplitudes.length; h++) {
                     const ratio = currentSystem.ratios[h];
                     const amp = harmonicAmplitudes[h] * maxAmplitudeRadial * (1 / 12); 
-                    const normalizedIndex = h / (harmonicAmplitudes.length - 1);
-                    const radialOffset = maxAmplitudeRadial * spreadFactor * (normalizedIndex * normalizedIndex * 0.6 + normalizedIndex * 0.4); 
+                    
+                    // Calculate radial offset with proper spacing to prevent overlap at max spread
+                    let radialOffset = 0;
+                    if (spreadFactor > 0) {
+                        // At max spread (spreadFactor = 1), we want each harmonic to be spaced 
+                        // far enough apart that their waveforms don't overlap
+                        const maxWaveAmplitude = maxAmplitudeRadial * (1 / 12); // Maximum possible wave amplitude
+                        const spacingBuffer = maxWaveAmplitude * 2.5; // Buffer between waves (2.5x wave amplitude)
+                        const totalAvailableSpace = maxAmplitudeRadial * 0.8; // Use 80% of available radial space
+                        const activeHarmonics = harmonicAmplitudes.filter(a => a > 0.005).length;
+                        
+                        if (activeHarmonics > 1) {
+                            // Linear spacing distribution at max spread
+                            const maxSpacing = totalAvailableSpace / (activeHarmonics - 1);
+                            const actualSpacing = Math.min(spacingBuffer, maxSpacing);
+                            
+                            // Count active harmonics before this one
+                            let activeIndex = 0;
+                            for (let i = 0; i < h; i++) {
+                                if (harmonicAmplitudes[i] > 0.005) activeIndex++;
+                            }
+                            
+                            // Only apply offset if this harmonic is active
+                            if (harmonicAmplitudes[h] > 0.005) {
+                                radialOffset = actualSpacing * activeIndex * spreadFactor;
+                            }
+                        }
+                    } 
 
                     if (amp > 0.005) { 
                         p.stroke(p.color(harmonicColors[h] + '99')); 
@@ -1140,7 +1168,9 @@
                         for (let i = 0; i <= points; i++) {
                             let theta = p.map(i, 0, points, 0, p.TWO_PI);
                             
-                            let waveValue = p.getWaveValue(currentWaveform, visualizationRatio * theta + currentAngle);
+                            // In subharmonic mode, multiply the visualization ratio to show more detail
+                            let adjustedRatio = isSubharmonic ? visualizationRatio * 3 : visualizationRatio;
+                            let waveValue = p.getWaveValue(currentWaveform, adjustedRatio * theta + currentAngle);
                             
                             let r = totalRadialBase + waveValue * amp * visualAmpScale * 0.5;
                             
@@ -1235,7 +1265,7 @@
 
             function drawOscilloscope() {
                 const oscHeight = p.height * CANVAS_H_RATIO.OSCILLOSCOPE;
-                const oscY = p.height * (CANVAS_H_RATIO.RADIAL + CANVAS_H_RATIO.SPECTROGRAPH);
+                const oscY = p.height * CANVAS_H_RATIO.RADIAL; // Start right after the radial display
                 const ampScale = oscHeight * 0.4;
                 const points = p.width; 
 
@@ -1289,7 +1319,6 @@
                 p.updateDimensions();
                 
                 drawRadialDisplay();
-                drawSpectrograph();
                 drawOscilloscope();
             };
 
@@ -1527,9 +1556,11 @@
 
                 // --- Spread Control ---
                 const spreadSlider = document.getElementById('spread-slider');
+                const spreadValueDisplay = document.getElementById('spread-value');
                 spreadFactor = parseFloat(spreadSlider.value);
                 spreadSlider.addEventListener('input', (e) => {
                     spreadFactor = parseFloat(e.target.value);
+                    spreadValueDisplay.textContent = `${(spreadFactor * 100).toFixed(0)}%`;
                 });
 
                 // --- Visualization Frequency Control ---
