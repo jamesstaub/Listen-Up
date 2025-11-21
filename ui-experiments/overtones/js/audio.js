@@ -65,8 +65,8 @@ export async function initAudio() {
         audioEngine = new AudioEngine();
         wavetableManager = new WavetableManager();
         
-        // Initialize the audio engine (async) - temporarily disable AudioWorklet for debugging
-        await audioEngine.initialize(AppState.masterGainValue, { useAudioWorklet: false });
+        // Initialize the audio engine with oscillator-only synthesis
+        await audioEngine.initialize(AppState.masterGainValue);
         
         // Store references for compatibility
         AppState.audioContext = audioEngine.getContext();
@@ -157,18 +157,14 @@ function getFrequencyCorrection(waveformName) {
 // ================================
 
 /**
- * Starts synthesis using the appropriate method (AudioWorklet or oscillators)
+ * Starts synthesis using oscillators with period multiplier frequency correction
  */
 export async function startTone() {
     await initAudio();
     if (AppState.isPlaying) return;
 
     try {
-        if (audioEngine.isUsingAudioWorklet()) {
-            await startToneWithWorklet();
-        } else {
-            await startToneWithOscillators();
-        }
+        await startToneWithOscillators();
         updateAppState({ isPlaying: true });
     } catch (error) {
         console.error('Failed to start synthesis:', error);
@@ -177,23 +173,7 @@ export async function startTone() {
 }
 
 /**
- * AudioWorklet-based synthesis
- */
-async function startToneWithWorklet() {
-    const success = audioEngine.startSynthesis(
-        AppState.harmonicAmplitudes,
-        AppState.currentSystem.ratios,
-        AppState.fundamentalFrequency,
-        AppState.currentWaveform
-    );
-    
-    if (!success) {
-        throw new Error('AudioWorklet synthesis failed');
-    }
-}
-
-/**
- * Individual oscillator-based synthesis
+ * Individual oscillator-based synthesis with period multiplier frequency correction
  */
 async function startToneWithOscillators() {
     // Clear any existing oscillators
@@ -255,13 +235,8 @@ async function startToneOscillatorFallback() {
 export function stopTone() {
     if (!AppState.isPlaying || !audioEngine) return;
 
-    // Use appropriate stop method based on synthesis mode
-    if (audioEngine.isUsingAudioWorklet()) {
-        audioEngine.stopSynthesis();
-    } else {
-        // Stop individual oscillators
-        audioEngine.stopAllOscillators();
-    }
+    // Stop individual oscillators
+    audioEngine.stopAllOscillators();
 
     updateAppState({ 
         oscillators: [],
@@ -270,40 +245,19 @@ export function stopTone() {
 }
 
 /**
- * Updates synthesis parameters in real-time
+ * Updates synthesis parameters in real-time with period multiplier frequency correction
  */
 export function updateAudioProperties() {
     if (!AppState.isPlaying || !audioEngine) return;
 
     const rampTime = 0.02; // Shorter ramp time since we have momentum smoothing
-
-    if (audioEngine.isUsingAudioWorklet()) {
-        updateAudioPropertiesWithWorklet();
-    } else {
-        updateAudioPropertiesOscillatorFallback(rampTime);
-    }
+    updateAudioPropertiesOscillators(rampTime);
 }
 
 /**
- * Updates AudioWorklet synthesis parameters
+ * Updates oscillator parameters with period multiplier frequency correction
  */
-function updateAudioPropertiesWithWorklet() {
-    try {
-        audioEngine.updateSynthesis(
-            AppState.harmonicAmplitudes,
-            AppState.currentSystem.ratios,
-            AppState.fundamentalFrequency,
-            AppState.masterGainValue
-        );
-    } catch (error) {
-        console.error('AudioWorklet update failed:', error);
-    }
-}
-
-/**
- * Updates oscillator parameters for individual oscillator synthesis
- */
-function updateAudioPropertiesOscillatorFallback(rampTime) {
+function updateAudioPropertiesOscillators(rampTime) {
     // Update Master Gain
     audioEngine.updateMasterGain(AppState.masterGainValue, rampTime);
 
@@ -342,25 +296,13 @@ export function restartAudio() {
 // ================================
 
 /**
- * Samples the current waveform configuration into a buffer
- * Uses AudioWorklet sampling when available for accurate capture
+ * Samples the current waveform configuration into a buffer with period multiplier support
  * @returns {Object} {buffer: Float32Array, periodMultiplier: number}
  */
 export async function sampleCurrentWaveform() {
     await initAudio();
     
-    // Try AudioEngine sampling first (supports AudioWorklet)
-    if (audioEngine && audioEngine.isUsingAudioWorklet()) {
-        try {
-            const buffer = await audioEngine.sampleCurrentWaveform(WAVETABLE_SIZE);
-            return { buffer, periodMultiplier: 1 }; // AudioWorklet doesn't use period multiplier
-        } catch (error) {
-            console.warn('AudioEngine sampling failed, falling back to basic method:', error);
-            // Fall through to basic sampling
-        }
-    }
-    
-    // Fallback to basic harmonic synthesis sampling
+    // Use the working oscillator-based sampling with period multiplier algorithm
     return sampleCurrentWaveformBasic();
 }
 
@@ -668,9 +610,9 @@ export async function addToWaveforms(sampledData) {
         // This creates a PeriodicWave object and stores the period multiplier
         const waveKey = wavetableManager.addFromSamples(buffer, AppState.audioContext, 128, periodMultiplier);
         
-        // Send the custom waveform to AudioEngine (for AudioWorklet support)
+        // Send the custom waveform to AudioEngine (for AudioWorklet support) with period multiplier
         if (audioEngine) {
-            audioEngine.addCustomWaveform(waveKey, buffer);
+            audioEngine.addCustomWaveform(waveKey, buffer, periodMultiplier);
         }
         
         // Store in legacy format for compatibility with existing code
