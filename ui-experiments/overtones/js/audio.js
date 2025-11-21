@@ -5,6 +5,7 @@
 
 import { AppState, updateAppState, WAVETABLE_SIZE } from './config.js';
 import { calculateFrequency, generateFilenameParts, showStatus } from './utils.js';
+import { clearCustomWaveCache } from './visualization.js';
 
 // ================================
 // AUDIO INITIALIZATION
@@ -386,30 +387,47 @@ export function addToWaveforms(sampledBuffer) {
         return;
     }
 
-    // Convert harmonic amplitudes to Fourier coefficients for PeriodicWave
-    const numHarmonics = Math.min(AppState.harmonicAmplitudes.length, 128);
-    const real = new Float32Array(numHarmonics + 1).fill(0);
-    const imag = new Float32Array(numHarmonics + 1).fill(0);
+    // Convert the time-domain sampled buffer to frequency-domain Fourier coefficients
+    // This captures the complete waveform including the current waveform type and harmonics
+    const maxHarmonics = Math.min(128, Math.floor(sampledBuffer.length / 2));
+    const real = new Float32Array(maxHarmonics + 1).fill(0);
+    const imag = new Float32Array(maxHarmonics + 1).fill(0);
     
-    // Use the current harmonic amplitudes and ratios to build the Fourier series
-    for (let h = 0; h < numHarmonics && h < AppState.harmonicAmplitudes.length; h++) {
-        const amplitude = AppState.harmonicAmplitudes[h];
-        const ratio = AppState.currentSystem.ratios[h];
+    // Perform discrete Fourier transform to extract harmonic components
+    const N = sampledBuffer.length;
+    
+    // DC component (should be near zero for audio)
+    real[0] = 0;
+    
+    // Calculate Fourier coefficients for each harmonic
+    for (let k = 1; k <= maxHarmonics; k++) {
+        let realSum = 0;
+        let imagSum = 0;
         
-        if (amplitude > 0 && ratio > 0) {
-            // For each harmonic, find the closest integer harmonic
-            const harmonicIndex = Math.round(ratio);
-            if (harmonicIndex > 0 && harmonicIndex < real.length) {
-                // Add to the sine component (imaginary) for the base waveform shape
-                imag[harmonicIndex] += amplitude;
-            }
+        for (let n = 0; n < N; n++) {
+            const angle = (2 * Math.PI * k * n) / N;
+            realSum += sampledBuffer[n] * Math.cos(angle);
+            imagSum -= sampledBuffer[n] * Math.sin(angle); // Negative for DFT convention
         }
+        
+        // Normalize by sample count and scale for audio
+        real[k] = (2 * realSum) / N;
+        imag[k] = (2 * imagSum) / N;
     }
     
     const customWave = AppState.audioContext.createPeriodicWave(real, imag, { disableNormalization: false });
     AppState.customWaveCount++;
     const waveKey = `custom_${AppState.customWaveCount}`;
     AppState.blWaveforms[waveKey] = customWave;
+    
+    // Store the Fourier coefficients for visualization use
+    if (!AppState.customWaveCoefficients) {
+        AppState.customWaveCoefficients = {};
+    }
+    AppState.customWaveCoefficients[waveKey] = { real: real, imag: imag };
+
+    // Clear visualization cache to ensure fresh calculations
+    clearCustomWaveCache();
 
     // Generate UI name
     const parts = generateFilenameParts();

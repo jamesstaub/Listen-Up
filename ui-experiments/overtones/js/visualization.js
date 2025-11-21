@@ -68,18 +68,36 @@ export function createVisualizationSketch() {
         // WAVEFORM CALCULATION
         // ================================
 
+        // Cache for custom waveform lookup tables to avoid recalculating Fourier series
+        p.customWaveTables = {};
+        
         p.getWaveValue = function(type, theta) {
             if (type.startsWith('custom')) {
-                // For custom waveforms, synthesize based on current harmonic content
-                let sum = 0;
-                for (let h = 0; h < AppState.harmonicAmplitudes.length; h++) {
-                    const ratio = AppState.currentSystem.ratios[h];
-                    const amp = AppState.harmonicAmplitudes[h];
-                    if (amp > 0) {
-                        sum += p.sin(ratio * theta) * amp;
+                // For custom waveforms, use precomputed lookup table
+                if (AppState.customWaveCoefficients && AppState.customWaveCoefficients[type]) {
+                    // Check if we have a cached lookup table for this waveform
+                    if (!p.customWaveTables[type]) {
+                        // Precompute the waveform lookup table
+                        p.customWaveTables[type] = p.precomputeCustomWaveTable(AppState.customWaveCoefficients[type]);
                     }
+                    
+                    // Use lookup table with linear interpolation
+                    const table = p.customWaveTables[type];
+                    const normalizedTheta = (theta % p.TWO_PI) / p.TWO_PI; // Normalize to 0-1
+                    const index = normalizedTheta * (table.length - 1);
+                    const lowIndex = Math.floor(index);
+                    const highIndex = Math.ceil(index);
+                    const fraction = index - lowIndex;
+                    
+                    if (lowIndex === highIndex) {
+                        return table[lowIndex];
+                    } else {
+                        return table[lowIndex] * (1 - fraction) + table[highIndex] * fraction;
+                    }
+                } else {
+                    // Fallback to sine if coefficients not found
+                    return p.sin(theta);
                 }
-                return sum;
             }
             
             if (type === 'sine') {
@@ -108,6 +126,30 @@ export function createVisualizationSketch() {
             }
 
             return sum * multiplier * 0.7;
+        };
+
+        // Precompute custom waveform lookup table for performance
+        p.precomputeCustomWaveTable = function(coeffs) {
+            const tableSize = 512; // Good balance between memory and accuracy
+            const table = new Float32Array(tableSize);
+            
+            for (let i = 0; i < tableSize; i++) {
+                const theta = (i / tableSize) * p.TWO_PI;
+                let sum = 0;
+                
+                // Reconstruct waveform from Fourier series: sum of real*cos + imag*sin
+                for (let k = 1; k < coeffs.real.length && k < coeffs.imag.length; k++) {
+                    sum += coeffs.real[k] * p.cos(k * theta) + coeffs.imag[k] * p.sin(k * theta);
+                }
+                table[i] = sum;
+            }
+            
+            return table;
+        };
+        
+        // Clear cache when new waveforms are added
+        p.clearCustomWaveCache = function() {
+            p.customWaveTables = {};
         };
 
         // ================================
@@ -345,6 +387,15 @@ export function getSpreadFactor() {
         return AppState.p5Instance.getSpreadFactor();
     }
     return 0.2;
+}
+
+/**
+ * Clears custom waveform cache to free memory and ensure fresh calculations
+ */
+export function clearCustomWaveCache() {
+    if (AppState.p5Instance && AppState.p5Instance.clearCustomWaveCache) {
+        AppState.p5Instance.clearCustomWaveCache();
+    }
 }
 
 // ================================
