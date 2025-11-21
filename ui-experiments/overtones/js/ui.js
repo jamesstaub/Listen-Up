@@ -20,7 +20,11 @@ import {
     setupEventListener,
     updateText,
     updateValue,
-    showStatus 
+    showStatus,
+    smoothUpdateHarmonicAmplitude,
+    smoothUpdateMasterGain,
+    smoothUpdateSystem,
+    smoothUpdateSubharmonicMode
 } from './utils.js';
 import { startTone, stopTone, updateAudioProperties, restartAudio, sampleCurrentWaveform, exportAsWAV, addToWaveforms } from './audio.js';
 import { setSpreadFactor } from './visualization.js';
@@ -104,9 +108,10 @@ function setupControlSliders() {
     if (masterGainSlider) {
         masterGainSlider.addEventListener('input', (e) => {
             const value = parseFloat(e.target.value);
-            updateAppState({ masterGainValue: value });
             updateText('master-gain-value', `${(value * 100).toFixed(0)}%`);
-            updateAudioProperties();
+            
+            // Use smooth parameter interpolation to prevent crackling
+            smoothUpdateMasterGain(value);
         });
     }
 
@@ -175,16 +180,6 @@ function handleFundamentalChange(e) {
 }
 
 function changeOctave(direction) {
-    const newOctave = AppState.currentOctave + direction;
-    
-    if (newOctave < 0) {
-        showStatus("Cannot go below Octave 0.", 'warning');
-        return;
-    }
-    if (newOctave > 8) {
-        showStatus("Cannot go above Octave 8.", 'warning');
-        return;
-    }
     
     const newMidiNote = AppState.currentMidiNote + (direction * 12);
     updateFundamental(newMidiNote);
@@ -294,14 +289,13 @@ function populateSystemSelector() {
 
 function handleSystemChange(e) {
     const systemIndex = parseInt(e.target.value);
-    setCurrentSystem(systemIndex);
     
-    if (AppState.isPlaying) {
-        restartAudio();
-    }
-    
-    updateDrawbarLabels();
-    updateSystemDescription();
+    // Use smooth system update with UI update callback
+    smoothUpdateSystem(systemIndex, () => {
+        // Update UI after the system state has actually changed
+        updateDrawbarLabels();
+        updateSystemDescription();
+    });
 }
 
 function updateSystemDescription() {
@@ -321,8 +315,8 @@ function setupSubharmonicToggle() {
 
 function handleSubharmonicToggle() {
     const isSubharmonic = !AppState.isSubharmonic;
-    updateAppState({ isSubharmonic });
     
+    // Update immediate UI elements first
     const toggle = document.getElementById('subharmonic-toggle');
     const subharmonicLabel = document.getElementById('subharmonic-label');
     const overtoneLabel = toggle?.previousElementSibling;
@@ -346,12 +340,12 @@ function handleSubharmonicToggle() {
             overtoneLabel.classList.remove('inactive');
         }
     }
-
-    if (AppState.isPlaying) {
-        restartAudio();
-    }
     
-    updateDrawbarLabels();
+    // Use smooth mode update with callback for UI updates that depend on state
+    smoothUpdateSubharmonicMode(isSubharmonic, () => {
+        // Update drawbar labels after the state has actually changed
+        updateDrawbarLabels();
+    });
 }
 
 // ================================
@@ -428,8 +422,8 @@ function handleDrawbarChange(e) {
     const index = parseInt(e.target.dataset.index);
     const value = parseFloat(e.target.value);
     
-    setHarmonicAmplitude(index, value);
-    updateAudioProperties();
+    // Use smooth parameter interpolation to prevent crackling
+    smoothUpdateHarmonicAmplitude(index, value);
 }
 
 function updateDrawbarLabels() {

@@ -4,6 +4,7 @@
  */
 
 import { MIDI_NOTE_NAMES, AppState } from './config.js';
+import { momentumSmoother } from './momentum-smoother.js';
 
 // ================================
 // MIDI UTILITIES
@@ -185,7 +186,7 @@ export function updateValue(elementId, value) {
  * @param {number} max - Maximum allowed value
  * @returns {boolean} Whether the frequency is valid
  */
-export function validateFrequency(frequency, min = 10, max = 10000) {
+export function validateFrequency(frequency, min = 0.0001, max = 10000) {
     return !isNaN(frequency) && frequency >= min && frequency <= max;
 }
 
@@ -214,23 +215,108 @@ export function mapRange(value, start1, stop1, start2, stop2) {
 }
 
 // ================================
-// DEBOUNCING UTILITY
+// PARAMETER INTERPOLATION HELPERS
 // ================================
 
+// Re-export for convenience
+export { momentumSmoother } from './momentum-smoother.js';
+
 /**
- * Creates a debounced version of a function
- * @param {Function} func - Function to debounce
- * @param {number} wait - Wait time in milliseconds
- * @returns {Function} Debounced function
+ * Smooth harmonic amplitude update with momentum (immediate response, no debouncing)
+ * @param {number} index - Harmonic index
+ * @param {number} value - New amplitude value
  */
-export function debounce(func, wait) {
-    let timeout;
-    return function executedFunction(...args) {
-        const later = () => {
-            clearTimeout(timeout);
-            func(...args);
-        };
-        clearTimeout(timeout);
-        timeout = setTimeout(later, wait);
+export function smoothUpdateHarmonicAmplitude(index, value) {
+    const key = `harmonic_${index}`;
+    
+    momentumSmoother.smoothTo(
+        key,
+        value,
+        async (smoothedValue) => {
+            // Update state immediately
+            AppState.harmonicAmplitudes[index] = smoothedValue;
+            
+            // Update audio properties immediately (no debouncing delay)
+            const { updateAudioProperties } = await import('./audio.js');
+            updateAudioProperties();
+        },
+        0.75 // Higher smoothness for harmonic amplitudes (less aggressive smoothing)
+    );
+}
+
+/**
+ * Smooth master gain update with momentum (immediate response)
+ * @param {number} value - New gain value
+ */
+export function smoothUpdateMasterGain(value) {
+    momentumSmoother.smoothTo(
+        'master_gain',
+        value,
+        async (smoothedValue) => {
+            AppState.masterGainValue = smoothedValue;
+            const { updateAudioProperties } = await import('./audio.js');
+            updateAudioProperties();
+        },
+        0.8 // Slightly more smoothing for master gain
+    );
+}
+
+/**
+ * Smooth system change with momentum smoothing
+ * @param {number} systemIndex - Index of new system
+ * @param {Function} onComplete - Optional callback when update completes
+ */
+export function smoothUpdateSystem(systemIndex, onComplete = null) {
+    // For system changes, we can apply immediately since they don't need continuous smoothing
+    // The audio parameter changes will be smoothed by updateAudioProperties
+    const applySystemChange = async () => {
+        const { setCurrentSystem } = await import('./config.js');
+        const { updateAudioProperties } = await import('./audio.js');
+        
+        // Update system
+        setCurrentSystem(systemIndex);
+        
+        // If playing, smoothly update frequencies
+        if (AppState.isPlaying) {
+            updateAudioProperties();
+        }
+        
+        // Call completion callback if provided
+        if (onComplete) {
+            onComplete();
+        }
     };
+    
+    // Small delay to prevent too rapid system switching
+    setTimeout(applySystemChange, 50);
+}
+
+/**
+ * Smooth subharmonic mode change with momentum smoothing
+ * @param {boolean} isSubharmonic - New subharmonic mode state
+ * @param {Function} onComplete - Optional callback when update completes
+ */
+export function smoothUpdateSubharmonicMode(isSubharmonic, onComplete = null) {
+    // For mode changes, we can apply immediately since they don't need continuous smoothing
+    // The audio parameter changes will be smoothed by updateAudioProperties
+    const applyModeChange = async () => {
+        const { updateAppState } = await import('./config.js');
+        const { updateAudioProperties } = await import('./audio.js');
+        
+        // Update state
+        updateAppState({ isSubharmonic: isSubharmonic });
+        
+        // If playing, smoothly update frequencies
+        if (AppState.isPlaying) {
+            updateAudioProperties();
+        }
+        
+        // Call completion callback if provided
+        if (onComplete) {
+            onComplete();
+        }
+    };
+    
+    // Small delay to prevent too rapid mode switching
+    setTimeout(applyModeChange, 50);
 }

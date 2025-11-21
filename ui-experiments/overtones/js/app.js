@@ -5,6 +5,7 @@
 
 import { AppState, updateAppState } from './config.js';
 import { showStatus } from './utils.js';
+import { momentumSmoother } from './momentum-smoother.js';
 import { initAudio } from './audio.js';
 import { initVisualization } from './visualization.js';
 import { initUI, updateUI, setupAccessibility } from './ui.js';
@@ -75,6 +76,9 @@ function setupErrorHandling() {
  */
 function cleanup() {
     try {
+        // Clear momentum smoothing
+        momentumSmoother.clear();
+        
         // Stop audio if playing
         if (AppState.isPlaying && AppState.audioContext) {
             AppState.oscillators.forEach(node => {

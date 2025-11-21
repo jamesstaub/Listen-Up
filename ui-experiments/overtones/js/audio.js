@@ -160,17 +160,30 @@ export function updateAudioProperties() {
     if (!AppState.isPlaying || !AppState.audioContext) return;
 
     const now = AppState.audioContext.currentTime;
+    const rampTime = 0.02; // Shorter ramp time since we have momentum smoothing
 
-    // Update Master Gain immediately
-    AppState.masterGain.gain.linearRampToValueAtTime(AppState.masterGainValue, now + 0.01);
+    // Update Master Gain with exponential ramp (smoother for audio)
+    AppState.masterGain.gain.exponentialRampToValueAtTime(
+        Math.max(0.001, AppState.masterGainValue), // Prevent zero values for exponential ramp
+        now + rampTime
+    );
 
     AppState.oscillators.forEach((node, i) => {
         const ratio = AppState.currentSystem.ratios[i];
         const newFreq = calculateFrequency(ratio);
         const newGain = AppState.harmonicAmplitudes[i] * AppState.masterGainValue;
 
-        node.osc.frequency.linearRampToValueAtTime(newFreq, now + 0.01);
-        node.gainNode.gain.linearRampToValueAtTime(newGain, now + 0.01);
+        // Use exponential ramp for frequency (sounds more natural)
+        node.osc.frequency.exponentialRampToValueAtTime(
+            Math.max(0.1, newFreq), // Prevent zero/negative values for exponential ramp
+            now + rampTime
+        );
+        
+        // Special handling for gain: use linear ramp for very small values to avoid artifacts
+        const targetGain = Math.max(0.0001, newGain);
+        
+        // Always use exponential for gain changes since momentum smoothing handles the larger changes
+        node.gainNode.gain.exponentialRampToValueAtTime(targetGain, now + rampTime);
     });
 }
 

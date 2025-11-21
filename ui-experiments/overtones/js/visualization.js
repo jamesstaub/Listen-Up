@@ -180,7 +180,7 @@ export function createVisualizationSketch() {
                     let visualizationRatio = ratio;
                     let visualAmpScale = AppState.isSubharmonic ? (1 / ratio) : ratio;
 
-                    for (let i = 0; i <= points; i++) {
+                    for (let i = 0; i < points; i++) {
                         let theta = p.map(i, 0, points, 0, p.TWO_PI);
                         
                         // In subharmonic mode, multiply the visualization ratio to show more detail
@@ -193,7 +193,7 @@ export function createVisualizationSketch() {
                         let y = r * p.sin(theta);
                         p.vertex(x, y);
                     }
-                    p.endShape();
+                    p.endShape(p.CLOSE);
                 }
             }
         }
@@ -203,7 +203,7 @@ export function createVisualizationSketch() {
             p.fill(16, 185, 129, 37);
             
             p.beginShape();
-            for (let i = 0; i <= points; i++) {
+            for (let i = 0; i < points; i++) {
                 let theta = p.map(i, 0, points, 0, p.TWO_PI);
                 
                 let r = baseRadius;

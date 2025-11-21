@@ -40,7 +40,7 @@
                         <span id="master-gain-value">3%</span>
                     </label>
                     <input type="range" id="master-gain-slider" class="control-slider" 
-                           min="0.01" max="0.5" step="0.01" value="0.03">
+                           min="0.01" max="1" step="0.01" value="0.5">
                 </div>
 
                 <!-- Visualization Spread Control -->
@@ -142,6 +142,7 @@
 
     <!-- Application Modules -->
     <script type="module" src="js/config.js"></script>
+    <script type="module" src="js/momentum-smoother.js"></script>
     <script type="module" src="js/utils.js"></script>
     <script type="module" src="js/audio.js"></script>
     <script type="module" src="js/visualization.js"></script>
