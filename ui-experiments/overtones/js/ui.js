@@ -69,31 +69,44 @@ function setupMainButtons() {
     setupEventListener('add-wave-button', 'click', handleAddToWaveforms);
 }
 
-function handlePlayToggle() {
+async function handlePlayToggle() {
     const button = document.getElementById('play-button');
     if (AppState.isPlaying) {
         stopTone();
         button.textContent = "Start Tone";
         button.classList.remove('playing');
     } else {
-        startTone();
-        button.textContent = "Stop Tone";
-        button.classList.add('playing');
+        try {
+            await startTone();
+            button.textContent = "Stop Tone";
+            button.classList.add('playing');
+        } catch (error) {
+            console.error('Failed to start tone:', error);
+            showStatus('Failed to start audio. Please check browser permissions.', 'error');
+        }
     }
 }
 
 function handleExportWAV() {
-    const sampledBuffer = sampleCurrentWaveform();
-    if (sampledBuffer.length > 0) {
-        exportAsWAV(sampledBuffer, 1);
-    }
+    sampleCurrentWaveform().then(sampledBuffer => {
+        if (sampledBuffer.length > 0) {
+            exportAsWAV(sampledBuffer, 1);
+        }
+    }).catch(error => {
+        console.error('Failed to sample waveform for export:', error);
+        showStatus('Failed to sample waveform for export', 'error');
+    });
 }
 
 function handleAddToWaveforms() {
-    const sampledBuffer = sampleCurrentWaveform();
-    if (sampledBuffer.length > 0) {
-        addToWaveforms(sampledBuffer);
-    }
+    sampleCurrentWaveform().then(sampledBuffer => {
+        if (sampledBuffer.length > 0) {
+            return addToWaveforms(sampledBuffer);
+        }
+    }).catch(error => {
+        console.error('Failed to sample waveform for adding:', error);
+        showStatus('Failed to sample waveform for adding', 'error');
+    });
 }
 
 // ================================
@@ -106,6 +119,12 @@ function setupControlSliders() {
     const masterGainDisplay = document.getElementById('master-gain-value');
     
     if (masterGainSlider) {
+        // Initialize with AppState value
+        masterGainSlider.value = AppState.masterGainValue;
+        if (masterGainDisplay) {
+            masterGainDisplay.textContent = `${(AppState.masterGainValue * 100).toFixed(0)}%`;
+        }
+        
         masterGainSlider.addEventListener('input', (e) => {
             const value = parseFloat(e.target.value);
             updateText('master-gain-value', `${(value * 100).toFixed(0)}%`);

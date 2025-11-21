@@ -23,13 +23,13 @@ let wavetableManager = null;
 /**
  * Initializes the AudioContext and the audio graph
  */
-export function initAudio() {
+export async function initAudio() {
     if (!audioEngine) {
         audioEngine = new AudioEngine();
         wavetableManager = new WavetableManager();
         
-        // Initialize the audio engine
-        audioEngine.initialize(AppState.masterGainValue);
+        // Initialize the audio engine (async) - temporarily disable AudioWorklet for debugging
+        await audioEngine.initialize(AppState.masterGainValue, { useAudioWorklet: false });
         
         // Store references for compatibility
         AppState.audioContext = audioEngine.getContext();
@@ -44,7 +44,29 @@ export function initAudio() {
     }
     
     // Resume context if suspended
-    audioEngine.resume();
+    await audioEngine.resume();
+}
+
+// ================================
+// SYNTHESIS HELPERS
+// ================================
+
+/**
+ * Resolves waveform parameter to a proper Web Audio API format
+ * @param {string} waveformName - Waveform name from AppState
+ * @returns {string|PeriodicWave} Resolved waveform
+ */
+function resolveWaveform(waveformName) {
+    if (!waveformName) {
+        return 'sine';
+    }
+    
+    if (waveformName.startsWith('custom_')) {
+        const customWave = wavetableManager.getWaveform(waveformName);
+        return customWave || 'sine';
+    }
+    
+    return waveformName;
 }
 
 // ================================
@@ -52,59 +74,103 @@ export function initAudio() {
 // ================================
 
 /**
- * Starts all oscillators for the current harmonic configuration
+ * Starts synthesis using the appropriate method (AudioWorklet or oscillators)
  */
-export function startTone() {
-    initAudio();
+export async function startTone() {
+    await initAudio();
     if (AppState.isPlaying) return;
 
-    // Create oscillators for each harmonic
-    for (let i = 0; i < AppState.harmonicAmplitudes.length; i++) {
-        const amplitude = AppState.harmonicAmplitudes[i];
-        const ratio = AppState.currentSystem.ratios[i];
-        
-        if (amplitude > 0 && ratio > 0) {
-            const frequency = calculateFrequency(ratio);
-            const gain = amplitude * AppState.masterGainValue;
-            
-            // Determine waveform
-            let waveform = AppState.currentWaveform;
-            if (waveform.startsWith('custom_')) {
-                // Use custom waveform from wavetable manager
-                const customWave = wavetableManager.getWaveform(waveform);
-                if (customWave) {
-                    waveform = customWave;
-                } else {
-                    waveform = 'sine'; // Fallback
-                }
-            }
-            
-            // Create and start oscillator using AudioEngine
-            const oscData = audioEngine.createOscillator(frequency, waveform, gain);
-            const oscKey = `osc_${i}`;
-            audioEngine.addOscillator(oscKey, oscData);
-            
-            // Store for compatibility
-            AppState.oscillators.push({ 
-                osc: oscData.oscillator, 
-                gainNode: oscData.gainNode, 
-                ratio,
-                key: oscKey 
-            });
+    try {
+        if (audioEngine.isUsingAudioWorklet()) {
+            await startToneWithWorklet();
+        } else {
+            await startToneWithOscillators();
         }
+        updateAppState({ isPlaying: true });
+    } catch (error) {
+        console.error('Failed to start synthesis:', error);
+        throw error;
     }
-
-    updateAppState({ isPlaying: true });
 }
 
 /**
- * Stops all oscillators
+ * AudioWorklet-based synthesis
+ */
+async function startToneWithWorklet() {
+    const success = audioEngine.startSynthesis(
+        AppState.harmonicAmplitudes,
+        AppState.currentSystem.ratios,
+        AppState.fundamentalFrequency,
+        AppState.currentWaveform
+    );
+    
+    if (!success) {
+        throw new Error('AudioWorklet synthesis failed');
+    }
+}
+
+/**
+ * Individual oscillator-based synthesis
+ */
+async function startToneWithOscillators() {
+    // Clear any existing oscillators
+    AppState.oscillators = [];
+    
+    // Create oscillators for all harmonics
+    for (let i = 0; i < AppState.currentSystem.ratios.length; i++) {
+        const ratio = AppState.currentSystem.ratios[i];
+        const amplitude = AppState.harmonicAmplitudes[i] || 0;
+        
+        if (ratio > 0) {
+            const frequency = calculateFrequency(ratio);
+            const gain = amplitude * AppState.masterGainValue;
+            const waveform = resolveWaveform(AppState.currentWaveform);
+            
+            try {
+                const oscData = audioEngine.createOscillator(frequency, waveform, gain);
+                const oscKey = `harmonic_${i}`;
+                audioEngine.addOscillator(oscKey, oscData);
+                
+                // Ensure array is properly sized
+                while (AppState.oscillators.length <= i) {
+                    AppState.oscillators.push(null);
+                }
+                
+                AppState.oscillators[i] = { 
+                    key: oscKey,
+                    ratio: ratio
+                };
+            } catch (error) {
+                console.error(`Failed to create oscillator ${i}:`, error);
+                AppState.oscillators[i] = null;
+            }
+        } else {
+            AppState.oscillators[i] = null;
+        }
+    }
+}
+
+/**
+ * Fallback oscillator-based synthesis for compatibility
+ */
+async function startToneOscillatorFallback() {
+    // Legacy function - delegate to new implementation
+    await startToneWithOscillators();
+}
+
+/**
+ * Stops all synthesis
  */
 export function stopTone() {
     if (!AppState.isPlaying || !audioEngine) return;
 
-    // Stop all oscillators using AudioEngine
-    audioEngine.stopAllOscillators();
+    // Use appropriate stop method based on synthesis mode
+    if (audioEngine.isUsingAudioWorklet()) {
+        audioEngine.stopSynthesis();
+    } else {
+        // Stop individual oscillators
+        audioEngine.stopAllOscillators();
+    }
 
     updateAppState({ 
         oscillators: [],
@@ -113,26 +179,54 @@ export function stopTone() {
 }
 
 /**
- * Updates the frequency and gain of all active oscillators
+ * Updates synthesis parameters in real-time
  */
 export function updateAudioProperties() {
     if (!AppState.isPlaying || !audioEngine) return;
 
     const rampTime = 0.02; // Shorter ramp time since we have momentum smoothing
 
+    if (audioEngine.isUsingAudioWorklet()) {
+        updateAudioPropertiesWithWorklet();
+    } else {
+        updateAudioPropertiesOscillatorFallback(rampTime);
+    }
+}
+
+/**
+ * Updates AudioWorklet synthesis parameters
+ */
+function updateAudioPropertiesWithWorklet() {
+    try {
+        audioEngine.updateSynthesis(
+            AppState.harmonicAmplitudes,
+            AppState.currentSystem.ratios,
+            AppState.fundamentalFrequency,
+            AppState.masterGainValue
+        );
+    } catch (error) {
+        console.error('AudioWorklet update failed:', error);
+    }
+}
+
+/**
+ * Updates oscillator parameters for individual oscillator synthesis
+ */
+function updateAudioPropertiesOscillatorFallback(rampTime) {
     // Update Master Gain
     audioEngine.updateMasterGain(AppState.masterGainValue, rampTime);
 
-    // Update individual oscillators
+    // Update existing oscillators (gain and frequency)
     AppState.oscillators.forEach((node, i) => {
-        if (node.key) {
+        if (node && node.key) {
             const ratio = AppState.currentSystem.ratios[i];
             const newFreq = calculateFrequency(ratio);
-            const newGain = AppState.harmonicAmplitudes[i] * AppState.masterGainValue;
+            const amplitude = AppState.harmonicAmplitudes[i] || 0;
+            const newGain = amplitude * AppState.masterGainValue;
 
             // Use AudioEngine methods for smooth updates
             audioEngine.updateOscillatorFrequency(node.key, newFreq, rampTime);
-            audioEngine.updateOscillatorGain(node.key, Math.max(0.001, newGain), rampTime);
+            audioEngine.updateOscillatorGain(node.key, Math.max(0.0001, newGain), rampTime);
         }
     });
 }
@@ -153,9 +247,31 @@ export function restartAudio() {
 
 /**
  * Samples the current waveform configuration into a buffer
+ * Uses AudioWorklet sampling when available for accurate capture
  * @returns {Float32Array} Sampled waveform buffer
  */
-export function sampleCurrentWaveform() {
+export async function sampleCurrentWaveform() {
+    await initAudio();
+    
+    // Try AudioEngine sampling first (supports AudioWorklet)
+    if (audioEngine && audioEngine.isUsingAudioWorklet()) {
+        try {
+            return await audioEngine.sampleCurrentWaveform(WAVETABLE_SIZE);
+        } catch (error) {
+            console.warn('AudioEngine sampling failed, falling back to basic method:', error);
+            // Fall through to basic sampling
+        }
+    }
+    
+    // Fallback to basic harmonic synthesis sampling
+    return sampleCurrentWaveformBasic();
+}
+
+/**
+ * Basic waveform sampling using harmonic synthesis
+ * @returns {Float32Array} Sampled waveform buffer
+ */
+function sampleCurrentWaveformBasic() {
     const buffer = new Float32Array(WAVETABLE_SIZE);
     let maxAmplitude = 0;
     
@@ -248,8 +364,8 @@ export function exportAsWAV(buffer, numCycles = 1) {
  * Adds a sampled waveform to the list of available waveforms
  * @param {Float32Array} sampledBuffer - Sampled waveform data
  */
-export function addToWaveforms(sampledBuffer) {
-    initAudio();
+export async function addToWaveforms(sampledBuffer) {
+    await initAudio();
     if (sampledBuffer.length === 0) {
         showStatus("Warning: Cannot add empty waveform data.", 'warning');
         return;
@@ -258,6 +374,11 @@ export function addToWaveforms(sampledBuffer) {
     try {
         // Use WavetableManager to add the new waveform
         const waveKey = wavetableManager.addFromSamples(sampledBuffer, AppState.audioContext);
+        
+        // Send the custom waveform to AudioEngine (for AudioWorklet support)
+        if (audioEngine) {
+            audioEngine.addCustomWaveform(waveKey, sampledBuffer);
+        }
         
         // Store in legacy format for compatibility
         const coefficients = wavetableManager.getCoefficients(waveKey);

@@ -8,3 +8,4 @@ export { WaveformGenerator } from './WaveformGenerator.js';
 export { WAVExporter } from './WAVExporter.js';
 export { WavetableManager } from './WavetableManager.js';
 export { AudioEngine } from './AudioEngine.js';
+export { AudioWorkletManager } from './AudioWorkletManager.js';

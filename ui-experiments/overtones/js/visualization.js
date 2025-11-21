@@ -287,10 +287,9 @@ export function createVisualizationSketch() {
             p.line(0, oscHeight / 2, p.width, oscHeight / 2);
 
             // Label
-            p.fill('#f3f4f6');
             p.textAlign(p.LEFT, p.TOP);
             p.textSize(10);
-            p.text('Linear Waveform (Oscilloscope View)', 10, 5);
+            
 
             // Waveform
             p.stroke('#10b981');

@@ -1,6 +1,6 @@
 /**
  * HARMONIC SYNTHESIS AUDIO WORKLET PROCESSOR
- * Real-time harmonic series synthesis with custom waveforms
+ * Real-time harmonic series synthesis with custom waveforms and interpolation
  */
 
 class HarmonicSynthProcessor extends AudioWorkletProcessor {
@@ -14,15 +14,23 @@ class HarmonicSynthProcessor extends AudioWorkletProcessor {
         this.masterGain = 0.3;
         this.currentWaveform = 'sine';
         
+        // Interpolation settings
+        this.interpolationType = 'linear'; // 'none', 'linear', 'cubic', 'quintic'
+        
+        // Phase-locked synthesis
+        this.fundamentalPhase = 0;
+        this.isPhaseReset = false;
+        
         // Wavetable storage
         this.wavetables = new Map();
         this.wavetableSize = 2048;
         
-        // Phase accumulators for each harmonic
-        this.phases = new Float32Array(32).fill(0);
-        
         // Sample rate
         this.sampleRate = 44100;
+        
+        // Output mode
+        this.outputMode = 'mono'; // 'mono', 'multichannel'
+        this.maxChannels = 32;
         
         // Listen for parameter updates from main thread
         this.port.onmessage = (event) => {
@@ -31,6 +39,7 @@ class HarmonicSynthProcessor extends AudioWorkletProcessor {
         
         // Initialize with sine wavetable
         this.generateSineWavetable();
+        this.generateStandardWavetables();
     }
     
     /**
@@ -38,14 +47,28 @@ class HarmonicSynthProcessor extends AudioWorkletProcessor {
      */
     process(inputs, outputs, parameters) {
         const output = outputs[0];
-        const outputChannel = output[0];
         
-        if (!outputChannel) return true;
+        if (!output || output.length === 0) return true;
         
-        const blockSize = outputChannel.length;
+        const blockSize = output[0].length;
+        const numChannels = this.outputMode === 'multichannel' ? 
+            Math.min(output.length, this.maxChannels) : Math.min(output.length, 2); // Ensure stereo in mono mode
         
-        // Clear output buffer
-        outputChannel.fill(0);
+        // Clear all output channels
+        for (let ch = 0; ch < numChannels; ch++) {
+            if (output[ch]) {
+                output[ch].fill(0);
+            }
+        }
+        
+        // Calculate phase increment for fundamental
+        const fundamentalPhaseIncrement = (this.fundamentalFreq * 2 * Math.PI) / this.sampleRate;
+        
+        // Reset phases if requested (for phase-locked synthesis)
+        if (this.isPhaseReset) {
+            this.fundamentalPhase = 0;
+            this.isPhaseReset = false;
+        }
         
         // Generate each harmonic
         for (let h = 0; h < this.harmonicAmplitudes.length; h++) {
@@ -53,35 +76,55 @@ class HarmonicSynthProcessor extends AudioWorkletProcessor {
             const ratio = this.harmonicRatios[h];
             
             if (amplitude > 0 && ratio > 0) {
-                const frequency = this.fundamentalFreq * ratio;
-                const phaseIncrement = (frequency * 2 * Math.PI) / this.sampleRate;
+                // Skip frequencies above Nyquist to prevent aliasing
+                const harmonicFreq = this.fundamentalFreq * ratio;
+                if (harmonicFreq >= this.sampleRate / 2) {
+                    continue;
+                }
+                
+                const targetChannel = this.outputMode === 'multichannel' ? 
+                    Math.min(h, numChannels - 1) : 0;
+                
+                if (!output[targetChannel]) continue;
                 
                 for (let i = 0; i < blockSize; i++) {
-                    // Get waveform sample
-                    const sample = this.getWaveformSample(this.currentWaveform, this.phases[h]);
+                    // Phase-locked harmonic phase calculation with better precision
+                    const samplePhase = this.fundamentalPhase + (i * fundamentalPhaseIncrement);
+                    const harmonicPhase = (samplePhase * ratio) % (2 * Math.PI);
+                    
+                    // Get waveform sample with interpolation
+                    const sample = this.getWaveformSample(this.currentWaveform, harmonicPhase);
                     
                     // Apply amplitude and add to output
-                    outputChannel[i] += sample * amplitude * this.masterGain;
+                    const outputSample = sample * amplitude * this.masterGain;
+                    output[targetChannel][i] += outputSample;
                     
-                    // Update phase
-                    this.phases[h] += phaseIncrement;
-                    if (this.phases[h] >= 2 * Math.PI) {
-                        this.phases[h] -= 2 * Math.PI;
+                    // In mono mode, also output to right channel for stereo
+                    if (this.outputMode === 'mono' && output[1] && targetChannel === 0) {
+                        output[1][i] += outputSample;
                     }
                 }
             }
         }
         
-        // Soft clipping to prevent harsh distortion
-        for (let i = 0; i < blockSize; i++) {
-            outputChannel[i] = Math.tanh(outputChannel[i]);
+        // Update fundamental phase for next block
+        this.fundamentalPhase += fundamentalPhaseIncrement * blockSize;
+        this.fundamentalPhase = this.fundamentalPhase % (2 * Math.PI);
+        
+        // Apply soft clipping to prevent harsh distortion
+        for (let ch = 0; ch < numChannels; ch++) {
+            if (output[ch]) {
+                for (let i = 0; i < blockSize; i++) {
+                    output[ch][i] = Math.tanh(output[ch][i]);
+                }
+            }
         }
         
         return true;
     }
     
     /**
-     * Get waveform sample at given phase
+     * Get waveform sample at given phase with interpolation
      */
     getWaveformSample(waveform, phase) {
         if (waveform === 'sine') {
@@ -90,22 +133,86 @@ class HarmonicSynthProcessor extends AudioWorkletProcessor {
         
         // Use wavetable lookup for custom waveforms
         if (this.wavetables.has(waveform)) {
-            const table = this.wavetables.get(waveform);
-            const normalizedPhase = phase / (2 * Math.PI);
-            const index = normalizedPhase * (table.length - 1);
-            const lowIndex = Math.floor(index);
-            const highIndex = Math.ceil(index);
-            const fraction = index - lowIndex;
-            
-            if (lowIndex === highIndex) {
-                return table[lowIndex];
-            } else {
-                return table[lowIndex] * (1 - fraction) + table[highIndex] * fraction;
-            }
+            return this.interpolateWavetable(this.wavetables.get(waveform), phase);
         }
         
         // Fallback to sine
         return Math.sin(phase);
+    }
+    
+    /**
+     * Interpolate wavetable sample with configurable interpolation
+     */
+    interpolateWavetable(table, phase) {
+        const normalizedPhase = (phase % (2 * Math.PI)) / (2 * Math.PI);
+        const index = normalizedPhase * (table.length - 1);
+        
+        switch (this.interpolationType) {
+            case 'none':
+                return table[Math.round(index)] || 0;
+                
+            case 'linear':
+                return this.linearInterpolate(table, index);
+                
+            case 'cubic':
+                return this.cubicInterpolate(table, index);
+                
+            case 'quintic':
+                return this.quinticInterpolate(table, index);
+                
+            default:
+                return this.linearInterpolate(table, index);
+        }
+    }
+    
+    /**
+     * Linear interpolation
+     */
+    linearInterpolate(table, index) {
+        const lowIndex = Math.floor(index);
+        const highIndex = (lowIndex + 1) % table.length;
+        const fraction = index - lowIndex;
+        
+        return table[lowIndex] * (1 - fraction) + table[highIndex] * fraction;
+    }
+    
+    /**
+     * Cubic interpolation (Catmull-Rom)
+     */
+    cubicInterpolate(table, index) {
+        const i1 = Math.floor(index);
+        const i0 = (i1 - 1 + table.length) % table.length;
+        const i2 = (i1 + 1) % table.length;
+        const i3 = (i1 + 2) % table.length;
+        const t = index - i1;
+        
+        const v0 = table[i0];
+        const v1 = table[i1];
+        const v2 = table[i2];
+        const v3 = table[i3];
+        
+        return v1 + 0.5 * t * (
+            v2 - v0 + t * (
+                2 * v0 - 5 * v1 + 4 * v2 - v3 + t * (
+                    3 * (v1 - v2) + v3 - v0
+                )
+            )
+        );
+    }
+    
+    /**
+     * Quintic interpolation (smoother)
+     */
+    quinticInterpolate(table, index) {
+        const i1 = Math.floor(index);
+        const i0 = (i1 - 1 + table.length) % table.length;
+        const i2 = (i1 + 1) % table.length;
+        const t = index - i1;
+        
+        // Quintic smoothstep
+        const smoothT = t * t * t * (t * (t * 6 - 15) + 10);
+        
+        return table[i1] * (1 - smoothT) + table[i2] * smoothT;
     }
     
     /**
@@ -118,6 +225,34 @@ class HarmonicSynthProcessor extends AudioWorkletProcessor {
             table[i] = Math.sin(phase);
         }
         this.wavetables.set('sine', table);
+    }
+    
+    /**
+     * Generate standard waveform wavetables
+     */
+    generateStandardWavetables() {
+        // Square wave
+        const square = new Float32Array(this.wavetableSize);
+        for (let i = 0; i < this.wavetableSize; i++) {
+            const phase = (i / this.wavetableSize) * 2 * Math.PI;
+            square[i] = phase < Math.PI ? 1 : -1;
+        }
+        this.wavetables.set('square', square);
+        
+        // Sawtooth wave
+        const sawtooth = new Float32Array(this.wavetableSize);
+        for (let i = 0; i < this.wavetableSize; i++) {
+            sawtooth[i] = (2 * i / this.wavetableSize) - 1;
+        }
+        this.wavetables.set('sawtooth', sawtooth);
+        
+        // Triangle wave
+        const triangle = new Float32Array(this.wavetableSize);
+        for (let i = 0; i < this.wavetableSize; i++) {
+            const t = i / this.wavetableSize;
+            triangle[i] = t < 0.5 ? (4 * t - 1) : (3 - 4 * t);
+        }
+        this.wavetables.set('triangle', triangle);
     }
     
     /**
@@ -144,6 +279,18 @@ class HarmonicSynthProcessor extends AudioWorkletProcessor {
                 
             case 'updateWaveform':
                 this.currentWaveform = data.waveform;
+                break;
+                
+            case 'setInterpolationType':
+                this.interpolationType = data.interpolationType;
+                break;
+                
+            case 'setOutputMode':
+                this.outputMode = data.outputMode;
+                break;
+                
+            case 'resetPhase':
+                this.isPhaseReset = true;
                 break;
                 
             case 'addWavetable':
