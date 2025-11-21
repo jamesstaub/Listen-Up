@@ -10,6 +10,7 @@ export class WavetableManager {
     constructor() {
         this.waveforms = new Map();
         this.coefficients = new Map();
+        this.periodMultipliers = new Map(); // Store period multipliers for pitch correction
         this.count = 0;
     }
     
@@ -18,9 +19,10 @@ export class WavetableManager {
      * @param {Float32Array} samples - Time-domain samples
      * @param {AudioContext} context - Web Audio context
      * @param {number} maxHarmonics - Maximum harmonics to analyze
+     * @param {number} periodMultiplier - Period multiplier for pitch correction
      * @returns {string} Unique key for the new waveform
      */
-    addFromSamples(samples, context, maxHarmonics = 128) {
+    addFromSamples(samples, context, maxHarmonics = 128, periodMultiplier = 1) {
         if (samples.length === 0) {
             throw new Error("Cannot add empty waveform data.");
         }
@@ -35,9 +37,10 @@ export class WavetableManager {
         this.count++;
         const key = `custom_${this.count}`;
         
-        // Store waveform and coefficients
+        // Store waveform, coefficients, and period multiplier
         this.waveforms.set(key, periodicWave);
         this.coefficients.set(key, { real, imag });
+        this.periodMultipliers.set(key, periodMultiplier);
         
         return key;
     }
@@ -80,6 +83,15 @@ export class WavetableManager {
      */
     getCoefficients(key) {
         return this.coefficients.get(key) || null;
+    }
+    
+    /**
+     * Gets the period multiplier for pitch correction
+     * @param {string} key - Waveform key
+     * @returns {number} Period multiplier (1 if not found)
+     */
+    getPeriodMultiplier(key) {
+        return this.periodMultipliers.get(key) || 1;
     }
     
     /**

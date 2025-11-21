@@ -88,9 +88,10 @@ async function handlePlayToggle() {
 }
 
 function handleExportWAV() {
-    sampleCurrentWaveform().then(sampledBuffer => {
-        if (sampledBuffer.length > 0) {
-            exportAsWAV(sampledBuffer, 1);
+    sampleCurrentWaveform().then(sampledData => {
+        const buffer = sampledData.buffer || sampledData; // Handle both old and new format
+        if (buffer.length > 0) {
+            exportAsWAV(buffer, 1);
         }
     }).catch(error => {
         console.error('Failed to sample waveform for export:', error);
@@ -99,9 +100,10 @@ function handleExportWAV() {
 }
 
 function handleAddToWaveforms() {
-    sampleCurrentWaveform().then(sampledBuffer => {
-        if (sampledBuffer.length > 0) {
-            return addToWaveforms(sampledBuffer);
+    sampleCurrentWaveform().then(sampledData => {
+        const buffer = sampledData.buffer || sampledData; // Handle both old and new format
+        if (buffer.length > 0) {
+            return addToWaveforms(sampledData); // Pass the full data object (includes periodMultiplier)
         }
     }).catch(error => {
         console.error('Failed to sample waveform for adding:', error);

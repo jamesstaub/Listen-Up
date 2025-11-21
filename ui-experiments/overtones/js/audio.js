@@ -69,6 +69,28 @@ function resolveWaveform(waveformName) {
     return waveformName;
 }
 
+/**
+ * Gets the frequency correction factor for custom waveforms
+ * @param {string} waveformName - Waveform name from AppState
+ * @returns {number} Frequency multiplier (1/periodMultiplier)
+ */
+function getFrequencyCorrection(waveformName) {
+    if (!waveformName || !waveformName.startsWith('custom_')) {
+        return 1;
+    }
+    
+    // Get period multiplier from WavetableManager or AppState
+    let periodMultiplier = 1;
+    if (wavetableManager) {
+        periodMultiplier = wavetableManager.getPeriodMultiplier(waveformName);
+    } else if (AppState.customWavePeriodMultipliers) {
+        periodMultiplier = AppState.customWavePeriodMultipliers[waveformName] || 1;
+    }
+    
+    // Frequency correction is inverse of period multiplier
+    return 1 / periodMultiplier;
+}
+
 // ================================
 // OSCILLATOR MANAGEMENT
 // ================================
@@ -125,9 +147,13 @@ async function startToneWithOscillators() {
             const frequency = calculateFrequency(ratio);
             const gain = amplitude * AppState.masterGainValue;
             const waveform = resolveWaveform(AppState.currentWaveform);
+            const frequencyCorrection = getFrequencyCorrection(AppState.currentWaveform);
+            const correctedFrequency = frequency * frequencyCorrection;
+            
+            console.log(`Oscillator ${i}: base freq=${frequency}Hz, correction=${frequencyCorrection}, final=${correctedFrequency}Hz`);
             
             try {
-                const oscData = audioEngine.createOscillator(frequency, waveform, gain);
+                const oscData = audioEngine.createOscillator(correctedFrequency, waveform, gain);
                 const oscKey = `harmonic_${i}`;
                 audioEngine.addOscillator(oscKey, oscData);
                 
@@ -220,13 +246,15 @@ function updateAudioPropertiesOscillatorFallback(rampTime) {
     AppState.oscillators.forEach((node, i) => {
         if (node && node.key) {
             const ratio = AppState.currentSystem.ratios[i];
-            const newFreq = calculateFrequency(ratio);
+            const baseFreq = calculateFrequency(ratio);
+            const frequencyCorrection = getFrequencyCorrection(AppState.currentWaveform);
+            const newFreq = baseFreq * frequencyCorrection;
             const amplitude = AppState.harmonicAmplitudes[i] || 0;
             const newGain = amplitude * AppState.masterGainValue;
 
             // Use AudioEngine methods for smooth updates
             audioEngine.updateOscillatorFrequency(node.key, newFreq, rampTime);
-            audioEngine.updateOscillatorGain(node.key, Math.max(0.0001, newGain), rampTime);
+            audioEngine.updateOscillatorGain(node.key, newGain, rampTime);
         }
     });
 }
@@ -248,7 +276,7 @@ export function restartAudio() {
 /**
  * Samples the current waveform configuration into a buffer
  * Uses AudioWorklet sampling when available for accurate capture
- * @returns {Float32Array} Sampled waveform buffer
+ * @returns {Object} {buffer: Float32Array, periodMultiplier: number}
  */
 export async function sampleCurrentWaveform() {
     await initAudio();
@@ -256,7 +284,8 @@ export async function sampleCurrentWaveform() {
     // Try AudioEngine sampling first (supports AudioWorklet)
     if (audioEngine && audioEngine.isUsingAudioWorklet()) {
         try {
-            return await audioEngine.sampleCurrentWaveform(WAVETABLE_SIZE);
+            const buffer = await audioEngine.sampleCurrentWaveform(WAVETABLE_SIZE);
+            return { buffer, periodMultiplier: 1 }; // AudioWorklet doesn't use period multiplier
         } catch (error) {
             console.warn('AudioEngine sampling failed, falling back to basic method:', error);
             // Fall through to basic sampling
@@ -269,7 +298,7 @@ export async function sampleCurrentWaveform() {
 
 /**
  * Basic waveform sampling using harmonic synthesis
- * @returns {Float32Array} Sampled waveform buffer
+ * @returns {Object} {buffer: Float32Array, periodMultiplier: number}
  */
 function sampleCurrentWaveformBasic() {
     const buffer = new Float32Array(WAVETABLE_SIZE);
@@ -280,17 +309,37 @@ function sampleCurrentWaveformBasic() {
     if (!p || !p.getWaveValue) {
         console.error("Wavetable Error: p5 context not initialized or missing getWaveValue function");
         showStatus("Export failed: Visualization is not fully initialized. Try playing the tone first.", 'error');
-        return new Float32Array(0);
+        return { buffer: new Float32Array(0), periodMultiplier: 1 };
     }
     
     if (!AppState.currentSystem || !AppState.currentSystem.ratios || AppState.harmonicAmplitudes.length === 0) {
         console.error("Wavetable Error: Spectral system data is missing or incomplete");
         showStatus("Export failed: Spectral data (ratios/amplitudes) is missing.", 'error');
-        return new Float32Array(0);
+        return { buffer: new Float32Array(0), periodMultiplier: 1 };
     }
     
+    console.log('Sampling waveform with system:', AppState.currentSystem.name);
+    
+    // Get active ratios
+    const activeRatios = [];
+    for (let h = 0; h < AppState.harmonicAmplitudes.length; h++) {
+        if (AppState.harmonicAmplitudes[h] > 0.001) {
+            activeRatios.push(AppState.currentSystem.ratios[h]);
+        }
+    }
+    console.log('Active ratios:', activeRatios);
+    
+    // Calculate the period multiplier to minimize discontinuity
+    const periodMultiplier = calculateOptimalPeriod(activeRatios);
+    console.log('Period multiplier:', periodMultiplier);
+    
+    // The optimal period is periodMultiplier times the fundamental period
+    // We sample one full cycle of this longer period
+    const totalPeriodLength = p.TWO_PI * periodMultiplier;
+    
     for (let i = 0; i < WAVETABLE_SIZE; i++) {
-        const theta = p.map(i, 0, WAVETABLE_SIZE, 0, p.TWO_PI);
+        // Sample one complete period of the optimal period length
+        const theta = p.map(i, 0, WAVETABLE_SIZE, 0, totalPeriodLength);
         
         let summedWave = 0;
 
@@ -298,11 +347,27 @@ function sampleCurrentWaveformBasic() {
             const ratio = AppState.currentSystem.ratios[h];
             const amp = AppState.harmonicAmplitudes[h];
             
-            summedWave += p.getWaveValue(AppState.currentWaveform, ratio * theta) * amp;
+            if (amp > 0.001) { // Only include audible components
+                // The ratio remains unchanged - we're just sampling over a longer period
+                summedWave += p.getWaveValue(AppState.currentWaveform, ratio * theta) * amp;
+            }
         }
         
         buffer[i] = summedWave;
         maxAmplitude = Math.max(maxAmplitude, Math.abs(summedWave));
+    }
+
+    // Check for continuity
+    const startValue = buffer[0];
+    const endValue = buffer[buffer.length - 1];
+    const discontinuity = Math.abs(endValue - startValue);
+    console.log(`Wavetable discontinuity: ${discontinuity} (start: ${startValue}, end: ${endValue})`);
+    
+    // Report if we achieved good continuity
+    if (discontinuity < 0.01) {
+        console.log('✓ Good continuity achieved');
+    } else {
+        console.log('⚠ Still has discontinuity - may cause buzzing');
     }
 
     // Normalize the buffer
@@ -313,7 +378,50 @@ function sampleCurrentWaveformBasic() {
         }
     }
     
-    return buffer;
+    console.log(`Sampled ${buffer.length} points, max amplitude: ${maxAmplitude}`);
+    
+    return { buffer, periodMultiplier };
+}
+
+/**
+ * Calculate optimal period multiplier to minimize phase discontinuities
+ * @param {Array} ratios - Active frequency ratios
+ * @returns {number} Period multiplier
+ */
+function calculateOptimalPeriod(ratios) {
+    if (ratios.length === 0) return 1;
+    
+    // For each ratio, find the smallest integer period where ratio * period ≈ integer
+    const bestPeriods = ratios.map(ratio => {
+        let bestPeriod = 1;
+        let smallestError = Infinity;
+        
+        // Test periods 1-20
+        for (let period = 1; period <= 20; period++) {
+            const cycles = ratio * period;
+            const fractionalPart = Math.abs(cycles - Math.round(cycles));
+            
+            if (fractionalPart < smallestError) {
+                smallestError = fractionalPart;
+                bestPeriod = period;
+            }
+            
+            // If we found an exact match, stop
+            if (fractionalPart < 0.001) break;
+        }
+        
+        console.log(`Ratio ${ratio}: best period ${bestPeriod} gives ${ratio * bestPeriod} cycles (error: ${smallestError})`);
+        return bestPeriod;
+    });
+    
+    // Use the LCM of all best periods
+    const lcm = bestPeriods.reduce((acc, period) => {
+        const gcd = (a, b) => b === 0 ? a : gcd(b, a % b);
+        return (acc * period) / gcd(acc, period);
+    }, 1);
+    
+    // Cap at reasonable value
+    return Math.min(lcm, 20);
 }
 
 // ================================
@@ -364,20 +472,25 @@ export function exportAsWAV(buffer, numCycles = 1) {
  * Adds a sampled waveform to the list of available waveforms
  * @param {Float32Array} sampledBuffer - Sampled waveform data
  */
-export async function addToWaveforms(sampledBuffer) {
+export async function addToWaveforms(sampledData) {
     await initAudio();
-    if (sampledBuffer.length === 0) {
+    
+    // Handle both old format (just buffer) and new format (object with buffer + periodMultiplier)
+    const buffer = sampledData.buffer || sampledData;
+    const periodMultiplier = sampledData.periodMultiplier || 1;
+    
+    if (buffer.length === 0) {
         showStatus("Warning: Cannot add empty waveform data.", 'warning');
         return;
     }
 
     try {
-        // Use WavetableManager to add the new waveform
-        const waveKey = wavetableManager.addFromSamples(sampledBuffer, AppState.audioContext);
+        // Use WavetableManager to add the new waveform with period multiplier
+        const waveKey = wavetableManager.addFromSamples(buffer, AppState.audioContext, 128, periodMultiplier);
         
         // Send the custom waveform to AudioEngine (for AudioWorklet support)
         if (audioEngine) {
-            audioEngine.addCustomWaveform(waveKey, sampledBuffer);
+            audioEngine.addCustomWaveform(waveKey, buffer);
         }
         
         // Store in legacy format for compatibility
@@ -390,6 +503,14 @@ export async function addToWaveforms(sampledBuffer) {
         }
         AppState.customWaveCoefficients[waveKey] = coefficients;
         AppState.customWaveCount = wavetableManager.getCount();
+
+        // Store period multiplier in AppState for frequency correction
+        if (!AppState.customWavePeriodMultipliers) {
+            AppState.customWavePeriodMultipliers = {};
+        }
+        AppState.customWavePeriodMultipliers[waveKey] = periodMultiplier;
+        
+        console.log(`Stored waveform ${waveKey} with period multiplier ${periodMultiplier}`);
 
         // Clear visualization cache to ensure fresh calculations
         clearCustomWaveCache();

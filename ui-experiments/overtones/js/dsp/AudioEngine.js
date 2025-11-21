@@ -386,8 +386,12 @@ export class AudioEngine {
         const oscData = this.oscillators.get(key);
         if (oscData) {
             const now = this.context.currentTime;
-            const targetGain = Math.max(0.001, gain); // Avoid zero for exponential ramp
-            oscData.gainNode.gain.exponentialRampToValueAtTime(targetGain, now + rampTime);
+            // Allow true zero gain for silence
+            if (gain <= 0) {
+                oscData.gainNode.gain.setValueAtTime(0, now);
+            } else {
+                oscData.gainNode.gain.exponentialRampToValueAtTime(gain, now + rampTime);
+            }
         }
     }
     
@@ -399,8 +403,13 @@ export class AudioEngine {
     updateMasterGain(gain, rampTime = 0.05) {
         if (this.masterGain) {
             const now = this.context.currentTime;
-            const targetGain = Math.max(0.001, Math.min(gain, this.masterGain.maxGain));
-            this.masterGain.gain.exponentialRampToValueAtTime(targetGain, now + rampTime);
+            const clampedGain = Math.min(gain, this.masterGain.maxGain);
+            // Allow true zero gain for silence
+            if (clampedGain <= 0) {
+                this.masterGain.gain.setValueAtTime(0, now);
+            } else {
+                this.masterGain.gain.exponentialRampToValueAtTime(clampedGain, now + rampTime);
+            }
         }
     }
     
