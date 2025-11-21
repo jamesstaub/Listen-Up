@@ -1,11 +1,20 @@
 /**
  * AUDIO MODULE
  * Contains Web Audio API functions, oscillator management, and audio processing
+ * Refactored to use modular DSP classes
  */
 
 import { AppState, updateAppState, WAVETABLE_SIZE } from './config.js';
 import { calculateFrequency, generateFilenameParts, showStatus } from './utils.js';
 import { clearCustomWaveCache } from './visualization.js';
+import { AudioEngine, WavetableManager, WAVExporter } from './dsp/index.js';
+
+// ================================
+// DSP INSTANCES
+// ================================
+
+let audioEngine = null;
+let wavetableManager = null;
 
 // ================================
 // AUDIO INITIALIZATION
@@ -15,75 +24,27 @@ import { clearCustomWaveCache } from './visualization.js';
  * Initializes the AudioContext and the audio graph
  */
 export function initAudio() {
-    if (!AppState.audioContext) {
-        AppState.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    if (!audioEngine) {
+        audioEngine = new AudioEngine();
+        wavetableManager = new WavetableManager();
         
-        // Pre-calculate band-limited waveforms
-        AppState.blWaveforms.square = createBandLimitedWaveform(AppState.audioContext, 'square');
-        AppState.blWaveforms.sawtooth = createBandLimitedWaveform(AppState.audioContext, 'sawtooth');
-        AppState.blWaveforms.triangle = createBandLimitedWaveform(AppState.audioContext, 'triangle');
-
-        // Create dynamics compressor
-        AppState.compressor = AppState.audioContext.createDynamicsCompressor();
-        AppState.compressor.threshold.setValueAtTime(-12, AppState.audioContext.currentTime);
-        AppState.compressor.ratio.setValueAtTime(12, AppState.audioContext.currentTime);
-
-        // Create master gain node
-        AppState.masterGain = AppState.audioContext.createGain();
-        AppState.masterGain.gain.setValueAtTime(AppState.masterGainValue, AppState.audioContext.currentTime);
-        AppState.masterGain.maxGain = 1.0;
-
-        // Connect the audio graph
-        AppState.compressor.connect(AppState.masterGain);
-        AppState.masterGain.connect(AppState.audioContext.destination);
+        // Initialize the audio engine
+        audioEngine.initialize(AppState.masterGainValue);
+        
+        // Store references for compatibility
+        AppState.audioContext = audioEngine.getContext();
+        AppState.compressor = audioEngine.compressor;
+        AppState.masterGain = audioEngine.masterGain;
+        
+        // Store standard waveforms for compatibility
+        AppState.blWaveforms = AppState.blWaveforms || {};
+        AppState.blWaveforms.square = audioEngine.getStandardWaveform('square');
+        AppState.blWaveforms.sawtooth = audioEngine.getStandardWaveform('sawtooth');
+        AppState.blWaveforms.triangle = audioEngine.getStandardWaveform('triangle');
     }
     
-    // Resume context if suspended (needed for some browsers like Chrome)
-    if (AppState.audioContext.state === 'suspended') {
-        AppState.audioContext.resume();
-    }
-}
-
-// ================================
-// WAVEFORM GENERATION
-// ================================
-
-/**
- * Generates a PeriodicWave for a band-limited waveform (Square, Sawtooth, or Triangle)
- * @param {AudioContext} context - Audio context
- * @param {string} type - Waveform type ('square', 'sawtooth', 'triangle')
- * @returns {PeriodicWave} Generated periodic wave
- */
-function createBandLimitedWaveform(context, type) {
-    const maxHarmonics = 1024;
-    const real = new Float32Array(maxHarmonics + 1);
-    const imag = new Float32Array(maxHarmonics + 1);
-
-    for (let n = 1; n <= maxHarmonics; n++) {
-        let amplitude = 0;
-        let sign = 1;
-
-        switch (type) {
-            case 'square':
-                if (n % 2 !== 0) {
-                    amplitude = 4 / (Math.PI * n);
-                }
-                break;
-            case 'sawtooth':
-                amplitude = 2 / (Math.PI * n);
-                sign = (n % 2 === 0) ? -1 : 1;
-                break;
-            case 'triangle':
-                if (n % 2 !== 0) {
-                    amplitude = 8 / (Math.PI * Math.PI * n * n);
-                    const k = (n - 1) / 2;
-                    sign = (k % 2 === 0) ? 1 : -1;
-                }
-                break;
-        }
-        imag[n] = amplitude * sign;
-    }
-    return context.createPeriodicWave(real, imag, { disableNormalization: false });
+    // Resume context if suspended
+    audioEngine.resume();
 }
 
 // ================================
@@ -97,36 +58,40 @@ export function startTone() {
     initAudio();
     if (AppState.isPlaying) return;
 
-    const now = AppState.audioContext.currentTime;
-    
+    // Create oscillators for each harmonic
     for (let i = 0; i < AppState.harmonicAmplitudes.length; i++) {
+        const amplitude = AppState.harmonicAmplitudes[i];
         const ratio = AppState.currentSystem.ratios[i];
-        const gainValue = AppState.harmonicAmplitudes[i];
         
-        const osc = AppState.audioContext.createOscillator();
-        const gainNode = AppState.audioContext.createGain();
-        
-        // Set waveform: Use PeriodicWave if available, otherwise default to sine
-        if (AppState.currentWaveform === 'sine') {
-            osc.type = 'sine';
-        } else if (AppState.blWaveforms[AppState.currentWaveform]) {
-            // Use the PeriodicWave object (pre-calculated BL or custom-exported)
-            osc.setPeriodicWave(AppState.blWaveforms[AppState.currentWaveform]);
-        } else {
-            // Fallback to sine if the selected waveform doesn't exist
-            osc.type = 'sine';
+        if (amplitude > 0 && ratio > 0) {
+            const frequency = calculateFrequency(ratio);
+            const gain = amplitude * AppState.masterGainValue;
+            
+            // Determine waveform
+            let waveform = AppState.currentWaveform;
+            if (waveform.startsWith('custom_')) {
+                // Use custom waveform from wavetable manager
+                const customWave = wavetableManager.getWaveform(waveform);
+                if (customWave) {
+                    waveform = customWave;
+                } else {
+                    waveform = 'sine'; // Fallback
+                }
+            }
+            
+            // Create and start oscillator using AudioEngine
+            const oscData = audioEngine.createOscillator(frequency, waveform, gain);
+            const oscKey = `osc_${i}`;
+            audioEngine.addOscillator(oscKey, oscData);
+            
+            // Store for compatibility
+            AppState.oscillators.push({ 
+                osc: oscData.oscillator, 
+                gainNode: oscData.gainNode, 
+                ratio,
+                key: oscKey 
+            });
         }
-
-        osc.frequency.setValueAtTime(calculateFrequency(ratio), now);
-        // Partial gain is relative to the masterGainValue
-        gainNode.gain.setValueAtTime(gainValue * AppState.masterGainValue, now);
-        
-        osc.connect(gainNode);
-        gainNode.connect(AppState.compressor);
-        
-        osc.start(now);
-        
-        AppState.oscillators.push({ osc, gainNode, ratio });
     }
 
     updateAppState({ isPlaying: true });
@@ -136,17 +101,10 @@ export function startTone() {
  * Stops all oscillators
  */
 export function stopTone() {
-    if (!AppState.isPlaying || !AppState.audioContext) return;
+    if (!AppState.isPlaying || !audioEngine) return;
 
-    const now = AppState.audioContext.currentTime;
-
-    AppState.oscillators.forEach(node => {
-        node.gainNode.gain.setValueAtTime(node.gainNode.gain.value, now);
-        node.gainNode.gain.linearRampToValueAtTime(0.0001, now + 0.05);
-        node.osc.stop(now + 0.06);
-        node.osc.disconnect();
-        node.gainNode.disconnect();
-    });
+    // Stop all oscillators using AudioEngine
+    audioEngine.stopAllOscillators();
 
     updateAppState({ 
         oscillators: [],
@@ -158,33 +116,24 @@ export function stopTone() {
  * Updates the frequency and gain of all active oscillators
  */
 export function updateAudioProperties() {
-    if (!AppState.isPlaying || !AppState.audioContext) return;
+    if (!AppState.isPlaying || !audioEngine) return;
 
-    const now = AppState.audioContext.currentTime;
     const rampTime = 0.02; // Shorter ramp time since we have momentum smoothing
 
-    // Update Master Gain with exponential ramp (smoother for audio)
-    AppState.masterGain.gain.exponentialRampToValueAtTime(
-        Math.max(0.001, AppState.masterGainValue), // Prevent zero values for exponential ramp
-        now + rampTime
-    );
+    // Update Master Gain
+    audioEngine.updateMasterGain(AppState.masterGainValue, rampTime);
 
+    // Update individual oscillators
     AppState.oscillators.forEach((node, i) => {
-        const ratio = AppState.currentSystem.ratios[i];
-        const newFreq = calculateFrequency(ratio);
-        const newGain = AppState.harmonicAmplitudes[i] * AppState.masterGainValue;
+        if (node.key) {
+            const ratio = AppState.currentSystem.ratios[i];
+            const newFreq = calculateFrequency(ratio);
+            const newGain = AppState.harmonicAmplitudes[i] * AppState.masterGainValue;
 
-        // Use exponential ramp for frequency (sounds more natural)
-        node.osc.frequency.exponentialRampToValueAtTime(
-            Math.max(0.1, newFreq), // Prevent zero/negative values for exponential ramp
-            now + rampTime
-        );
-        
-        // Special handling for gain: use linear ramp for very small values to avoid artifacts
-        const targetGain = Math.max(0.0001, newGain);
-        
-        // Always use exponential for gain changes since momentum smoothing handles the larger changes
-        node.gainNode.gain.exponentialRampToValueAtTime(targetGain, now + rampTime);
+            // Use AudioEngine methods for smooth updates
+            audioEngine.updateOscillatorFrequency(node.key, newFreq, rampTime);
+            audioEngine.updateOscillatorGain(node.key, Math.max(0.001, newGain), rampTime);
+        }
     });
 }
 
@@ -271,13 +220,6 @@ export function exportAsWAV(buffer, numCycles = 1) {
     }
     
     const sampleRate = AppState.audioContext.sampleRate;
-    const cycleLength = buffer.length;
-    const totalLength = cycleLength * numCycles;
-    const fullBuffer = new Float32Array(totalLength);
-    
-    for (let i = 0; i < totalLength; i++) {
-        fullBuffer[i] = buffer[i % cycleLength];
-    }
 
     // Generate filename
     const parts = generateFilenameParts();
@@ -287,89 +229,15 @@ export function exportAsWAV(buffer, numCycles = 1) {
         parts.systemName,
         parts.levels,
         parts.subharmonicFlag
-    ].filter(Boolean).join('-');
+    ].filter(Boolean).join('-') + '.wav';
 
-    // Generate WAV file
-    const arrayBuffer = createWAVBuffer(fullBuffer, sampleRate);
-    downloadWAVFile(arrayBuffer, filename);
-    
-    showStatus(`Wavetable exported as ${filename}.wav!`, 'success');
-}
-
-/**
- * Creates a WAV buffer from audio data
- * @param {Float32Array} buffer - Audio buffer
- * @param {number} sampleRate - Sample rate
- * @returns {ArrayBuffer} WAV file buffer
- */
-function createWAVBuffer(buffer, sampleRate) {
-    const bufferLen = buffer.length;
-    const numOfChan = 1;
-    const bytesPerSample = 2; // 16-bit
-    const blockAlign = numOfChan * bytesPerSample;
-    const byteRate = sampleRate * blockAlign;
-    const dataSize = bufferLen * bytesPerSample;
-    const fileSize = 36 + dataSize;
-    
-    const arrayBuffer = new ArrayBuffer(fileSize + 8);
-    const view = new DataView(arrayBuffer);
-
-    // Write RIFF chunk
-    writeString(view, 0, 'RIFF');
-    view.setUint32(4, fileSize, true); // Little-endian
-    writeString(view, 8, 'WAVE');
-
-    // Write FMT chunk
-    writeString(view, 12, 'fmt ');
-    view.setUint32(16, 16, true);          // Sub-chunk size
-    view.setUint16(20, 1, true);           // PCM format
-    view.setUint16(22, numOfChan, true);   // Mono
-    view.setUint32(24, sampleRate, true);
-    view.setUint32(28, byteRate, true);
-    view.setUint16(32, blockAlign, true);
-    view.setUint16(34, 16, true);          // 16 bits per sample
-
-    // Write DATA chunk
-    writeString(view, 36, 'data');
-    view.setUint32(40, dataSize, true);
-
-    // Write the actual audio data (converted to 16-bit integer)
-    let offset = 44;
-    for (let i = 0; i < bufferLen; i++, offset += 2) {
-        const s = Math.max(-1, Math.min(1, buffer[i]));
-        view.setInt16(offset, s * 0x7FFF, true);
+    try {
+        // Use WAVExporter class
+        WAVExporter.exportAsWAV(buffer, sampleRate, filename, numCycles);
+        showStatus(`Wavetable exported as ${filename}!`, 'success');
+    } catch (error) {
+        showStatus(`WAV Export Failed: ${error.message}`, 'error');
     }
-
-    return view;
-}
-
-/**
- * Writes a string to a DataView
- * @param {DataView} view - DataView to write to
- * @param {number} offset - Offset to write at
- * @param {string} string - String to write
- */
-function writeString(view, offset, string) {
-    for (let i = 0; i < string.length; i++) {
-        view.setUint8(offset + i, string.charCodeAt(i));
-    }
-}
-
-/**
- * Downloads a WAV file
- * @param {DataView} arrayBuffer - WAV data
- * @param {string} filename - Filename without extension
- */
-function downloadWAVFile(arrayBuffer, filename) {
-    const blob = new Blob([arrayBuffer], { type: 'audio/wav' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${filename}.wav`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
 }
 
 // ================================
@@ -387,69 +255,48 @@ export function addToWaveforms(sampledBuffer) {
         return;
     }
 
-    // Convert the time-domain sampled buffer to frequency-domain Fourier coefficients
-    // This captures the complete waveform including the current waveform type and harmonics
-    const maxHarmonics = Math.min(128, Math.floor(sampledBuffer.length / 2));
-    const real = new Float32Array(maxHarmonics + 1).fill(0);
-    const imag = new Float32Array(maxHarmonics + 1).fill(0);
-    
-    // Perform discrete Fourier transform to extract harmonic components
-    const N = sampledBuffer.length;
-    
-    // DC component (should be near zero for audio)
-    real[0] = 0;
-    
-    // Calculate Fourier coefficients for each harmonic
-    for (let k = 1; k <= maxHarmonics; k++) {
-        let realSum = 0;
-        let imagSum = 0;
+    try {
+        // Use WavetableManager to add the new waveform
+        const waveKey = wavetableManager.addFromSamples(sampledBuffer, AppState.audioContext);
         
-        for (let n = 0; n < N; n++) {
-            const angle = (2 * Math.PI * k * n) / N;
-            realSum += sampledBuffer[n] * Math.cos(angle);
-            imagSum -= sampledBuffer[n] * Math.sin(angle); // Negative for DFT convention
+        // Store in legacy format for compatibility
+        const coefficients = wavetableManager.getCoefficients(waveKey);
+        const periodicWave = wavetableManager.getWaveform(waveKey);
+        
+        AppState.blWaveforms[waveKey] = periodicWave;
+        if (!AppState.customWaveCoefficients) {
+            AppState.customWaveCoefficients = {};
+        }
+        AppState.customWaveCoefficients[waveKey] = coefficients;
+        AppState.customWaveCount = wavetableManager.getCount();
+
+        // Clear visualization cache to ensure fresh calculations
+        clearCustomWaveCache();
+
+        // Generate UI name
+        const parts = generateFilenameParts();
+        const optionName = `${parts.noteLetter}-${parts.waveform}-${parts.systemName}-${parts.levels}` + 
+                          (parts.subharmonicFlag ? `-${parts.subharmonicFlag}` : '');
+
+        // Add to UI
+        const select = document.getElementById('waveform-select');
+        if (select) {
+            const option = document.createElement('option');
+            option.textContent = `Custom ${AppState.customWaveCount}: ${optionName}`;
+            option.value = waveKey;
+            select.appendChild(option);
+            
+            // Select the new waveform automatically
+            updateAppState({ currentWaveform: waveKey });
+            select.value = waveKey;
         }
         
-        // Normalize by sample count and scale for audio
-        real[k] = (2 * realSum) / N;
-        imag[k] = (2 * imagSum) / N;
-    }
-    
-    const customWave = AppState.audioContext.createPeriodicWave(real, imag, { disableNormalization: false });
-    AppState.customWaveCount++;
-    const waveKey = `custom_${AppState.customWaveCount}`;
-    AppState.blWaveforms[waveKey] = customWave;
-    
-    // Store the Fourier coefficients for visualization use
-    if (!AppState.customWaveCoefficients) {
-        AppState.customWaveCoefficients = {};
-    }
-    AppState.customWaveCoefficients[waveKey] = { real: real, imag: imag };
+        showStatus(`Successfully added new waveform: Custom ${AppState.customWaveCount}. Now synthesizing with it!`, 'success');
 
-    // Clear visualization cache to ensure fresh calculations
-    clearCustomWaveCache();
-
-    // Generate UI name
-    const parts = generateFilenameParts();
-    const optionName = `${parts.noteLetter}-${parts.waveform}-${parts.systemName}-${parts.levels}` + 
-                      (parts.subharmonicFlag ? `-${parts.subharmonicFlag}` : '');
-
-    // Add to UI
-    const select = document.getElementById('waveform-select');
-    if (select) {
-        const option = document.createElement('option');
-        option.textContent = `Custom ${AppState.customWaveCount}: ${optionName}`;
-        option.value = waveKey;
-        select.appendChild(option);
-        
-        // Select the new waveform automatically
-        updateAppState({ currentWaveform: waveKey });
-        select.value = waveKey;
-    }
-    
-    showStatus(`Successfully added new waveform: Custom ${AppState.customWaveCount}. Now synthesizing with it!`, 'success');
-
-    if (AppState.isPlaying) {
-        restartAudio();
+        if (AppState.isPlaying) {
+            restartAudio();
+        }
+    } catch (error) {
+        showStatus(`Failed to add waveform: ${error.message}`, 'error');
     }
 }
