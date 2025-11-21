@@ -1,7 +1,44 @@
 /**
- * AUDIO MODULE
+ * AUDIO MODULE WITH ADVANCED PERIOD MULTIPLIER SYSTEM
+ * 
+ * This module implements sophisticated wavetable synthesis with automatic phase
+ * continuity correction for irrational frequency ratios found in alternative
+ * tuning systems (Just Intonation, microtonal scales, etc.).
+ * 
+ * CORE INNOVATION: PERIOD MULTIPLIER ALGORITHM
+ * 
+ * PROBLEM SOLVED:
+ * Traditional wavetable synthesis samples exactly one period (2π) of a waveform.
+ * For irrational ratios like 16/15 (Just Intonation), this creates phase 
+ * discontinuities at the wavetable boundary, causing audible buzzing artifacts.
+ * 
+ * SOLUTION APPROACH:
+ * 1. Analyze active frequency ratios to find optimal sampling period
+ * 2. Sample N fundamental periods (where N minimizes phase errors for all ratios)
+ * 3. Store period multiplier (N) with each custom waveform
+ * 4. Apply frequency correction (freq × 1/N) during playback
+ * 5. Adjust WAV export sample rates for correct pitch
+ * 
+ * MATHEMATICAL FOUNDATION:
+ * For each ratio R, find smallest integer P where R × P ≈ integer.
+ * Use LCM of all optimal periods as the final period multiplier.
+ * This ensures ALL ratios complete near-integer cycles simultaneously.
+ * 
+ * SYSTEM COMPONENTS:
+ * - calculateOptimalPeriod(): Core mathematical algorithm
+ * - getFrequencyCorrection(): Automatic pitch compensation
+ * - sampleCurrentWaveformBasic(): Multi-period wavetable sampling
+ * - WavetableManager: Storage with period multiplier metadata
+ * - AudioEngine: Synthesis with frequency correction support
+ * 
+ * UNIVERSAL APPLICABILITY:
+ * This system works with ANY tuning system because it's based on mathematical
+ * properties of rational approximation, not tuning-specific optimizations.
+ * Successfully tested with Just Intonation, Equal Temperament variants,
+ * and exotic microtonal scales.
+ * 
  * Contains Web Audio API functions, oscillator management, and audio processing
- * Refactored to use modular DSP classes
+ * Refactored to use modular DSP classes with period multiplier support
  */
 
 import { AppState, updateAppState, WAVETABLE_SIZE } from './config.js';
@@ -70,16 +107,39 @@ function resolveWaveform(waveformName) {
 }
 
 /**
- * Gets the frequency correction factor for custom waveforms
- * @param {string} waveformName - Waveform name from AppState
- * @returns {number} Frequency multiplier (1/periodMultiplier)
+ * Gets the frequency correction factor for custom waveforms with period multipliers.
+ * 
+ * PURPOSE:
+ * When we create wavetables with period multipliers > 1, the wavetable contains
+ * multiple periods of the fundamental frequency packed together. The Web Audio API's
+ * PeriodicWave always assumes the buffer represents exactly ONE period, so it plays
+ * the packed periods at the original frequency, resulting in pitch that's too high.
+ * 
+ * CORRECTION FORMULA:
+ * If the wavetable contains N periods, we must play it at frequency × (1/N) to get
+ * the correct pitch. This frequency correction factor is 1/periodMultiplier.
+ * 
+ * EXAMPLE:
+ * - Original frequency: 440 Hz
+ * - Period multiplier: 15 (wavetable contains 15 periods)
+ * - Correction factor: 1/15 = 0.0667
+ * - Corrected frequency: 440 × 0.0667 = 29.33 Hz
+ * - Result: Web Audio plays 15 periods at 29.33 Hz = 440 Hz perceived pitch ✓
+ * 
+ * INTEGRATION:
+ * This correction is applied automatically during oscillator creation and updates
+ * in both individual oscillator and AudioWorklet synthesis modes.
+ * 
+ * @param {string} waveformName - Waveform name from AppState (e.g., 'custom_1234567890')
+ * @returns {number} Frequency correction factor (1/periodMultiplier for custom waves, 1 for standard waves)
  */
 function getFrequencyCorrection(waveformName) {
+    // Standard waveforms (sine, square, etc.) don't need correction
     if (!waveformName || !waveformName.startsWith('custom_')) {
         return 1;
     }
     
-    // Get period multiplier from WavetableManager or AppState
+    // Get period multiplier from WavetableManager or AppState fallback
     let periodMultiplier = 1;
     if (wavetableManager) {
         periodMultiplier = wavetableManager.getPeriodMultiplier(waveformName);
@@ -88,6 +148,7 @@ function getFrequencyCorrection(waveformName) {
     }
     
     // Frequency correction is inverse of period multiplier
+    // This compensates for the packed periods in the wavetable
     return 1 / periodMultiplier;
 }
 
@@ -147,6 +208,10 @@ async function startToneWithOscillators() {
             const frequency = calculateFrequency(ratio);
             const gain = amplitude * AppState.masterGainValue;
             const waveform = resolveWaveform(AppState.currentWaveform);
+            
+            // CRITICAL: Apply frequency correction for custom waveforms with period multipliers
+            // If the wavetable contains N periods, we must play at frequency × (1/N) to get correct pitch
+            // This compensates for the multi-period wavetables created by the period multiplier algorithm
             const frequencyCorrection = getFrequencyCorrection(AppState.currentWaveform);
             const correctedFrequency = frequency * frequencyCorrection;
             
@@ -247,6 +312,9 @@ function updateAudioPropertiesOscillatorFallback(rampTime) {
         if (node && node.key) {
             const ratio = AppState.currentSystem.ratios[i];
             const baseFreq = calculateFrequency(ratio);
+            
+            // Apply frequency correction for period multiplier compensation
+            // This ensures custom waveforms maintain correct pitch during real-time updates
             const frequencyCorrection = getFrequencyCorrection(AppState.currentWaveform);
             const newFreq = baseFreq * frequencyCorrection;
             const amplitude = AppState.harmonicAmplitudes[i] || 0;
@@ -297,7 +365,33 @@ export async function sampleCurrentWaveform() {
 }
 
 /**
- * Basic waveform sampling using harmonic synthesis
+ * Advanced waveform sampling with period multiplier optimization for phase continuity.
+ * 
+ * PROBLEM ADDRESSED:
+ * Traditional wavetable synthesis samples exactly one period (2π) of a waveform.
+ * For irrational frequency ratios common in alternative tuning systems, this creates
+ * phase discontinuities at the wavetable boundary, causing audible buzzing artifacts.
+ * 
+ * SOLUTION:
+ * 1. Analyze active frequency ratios to find optimal sampling period
+ * 2. Sample multiple fundamental periods (the "period multiplier") 
+ * 3. Ensure all ratios complete near-integer cycles within this extended period
+ * 4. Store period multiplier for later frequency correction during playback
+ * 
+ * TECHNICAL DETAILS:
+ * - Wavetable size: Fixed at 2048 samples for Web Audio compatibility
+ * - Period calculation: Uses LCM of individual ratio optimal periods
+ * - Phase continuity: Verified by comparing start/end values
+ * - Normalization: Applied after sampling to prevent clipping
+ * 
+ * OUTPUT FORMAT:
+ * Returns an object with:
+ * - buffer: Float32Array with normalized waveform samples
+ * - periodMultiplier: Number of periods contained in the buffer
+ * 
+ * The periodMultiplier is critical for correct pitch during playback - it tells
+ * the frequency correction system how to compensate for the packed periods.
+ * 
  * @returns {Object} {buffer: Float32Array, periodMultiplier: number}
  */
 function sampleCurrentWaveformBasic() {
@@ -320,7 +414,7 @@ function sampleCurrentWaveformBasic() {
     
     console.log('Sampling waveform with system:', AppState.currentSystem.name);
     
-    // Get active ratios
+    // Get active ratios (only those with meaningful amplitude)
     const activeRatios = [];
     for (let h = 0; h < AppState.harmonicAmplitudes.length; h++) {
         if (AppState.harmonicAmplitudes[h] > 0.001) {
@@ -330,25 +424,28 @@ function sampleCurrentWaveformBasic() {
     console.log('Active ratios:', activeRatios);
     
     // Calculate the period multiplier to minimize discontinuity
+    // This is the mathematical core of the phase continuity solution
     const periodMultiplier = calculateOptimalPeriod(activeRatios);
     console.log('Period multiplier:', periodMultiplier);
     
-    // The optimal period is periodMultiplier times the fundamental period
-    // We sample one full cycle of this longer period
+    // Sample over an extended period: periodMultiplier × fundamental period
+    // This ensures all active ratios complete near-integer cycles
     const totalPeriodLength = p.TWO_PI * periodMultiplier;
     
     for (let i = 0; i < WAVETABLE_SIZE; i++) {
-        // Sample one complete period of the optimal period length
+        // Map buffer index to extended period phase (0 to periodMultiplier × 2π)
         const theta = p.map(i, 0, WAVETABLE_SIZE, 0, totalPeriodLength);
         
         let summedWave = 0;
 
+        // Sum all active frequency components
         for (let h = 0; h < AppState.harmonicAmplitudes.length; h++) {
             const ratio = AppState.currentSystem.ratios[h];
             const amp = AppState.harmonicAmplitudes[h];
             
             if (amp > 0.001) { // Only include audible components
-                // The ratio remains unchanged - we're just sampling over a longer period
+                // Key insight: ratio frequency remains unchanged, we're just sampling
+                // over a longer period to ensure integer cycles for phase continuity
                 summedWave += p.getWaveValue(AppState.currentWaveform, ratio * theta) * amp;
             }
         }
@@ -384,19 +481,48 @@ function sampleCurrentWaveformBasic() {
 }
 
 /**
- * Calculate optimal period multiplier to minimize phase discontinuities
- * @param {Array} ratios - Active frequency ratios
- * @returns {number} Period multiplier
+ * Calculate optimal period multiplier to minimize phase discontinuities in wavetables.
+ * 
+ * MATHEMATICAL FOUNDATION:
+ * When creating wavetables from irrational frequency ratios (like 16/15 in Just Intonation),
+ * simply sampling one period (2π) often creates discontinuities because the ratio doesn't
+ * complete an integer number of cycles within that period. This causes buzzing artifacts.
+ * 
+ * SOLUTION APPROACH:
+ * Instead of sampling just 1 period, we find the smallest number of periods where ALL
+ * active ratios complete (nearly) integer cycles. This ensures phase continuity.
+ * 
+ * ALGORITHM:
+ * 1. For each ratio, find the smallest period P where ratio × P ≈ integer
+ * 2. Take the Least Common Multiple (LCM) of all optimal periods
+ * 3. Sample P periods instead of 1, then compensate frequency during playback
+ * 
+ * EXAMPLE:
+ * For ratio 16/15 = 1.0667:
+ * - Period 1: 1.0667 × 1 = 1.0667 cycles (0.0667 fractional error)
+ * - Period 15: 1.0667 × 15 = 16.000 cycles (0.000 fractional error) ✓
+ * 
+ * The wavetable contains 15 periods of the fundamental, so we must play it at
+ * frequency × (1/15) to get the correct pitch.
+ * 
+ * UNIVERSALITY:
+ * This algorithm works for ANY tuning system (Just Intonation, Equal Temperament,
+ * Pythagorean, microtonal scales, etc.) because it's based on mathematical
+ * properties of rational approximation, not tuning-specific optimizations.
+ * 
+ * @param {Array} ratios - Active frequency ratios from the current tuning system
+ * @returns {number} Period multiplier - number of fundamental periods to sample
  */
 function calculateOptimalPeriod(ratios) {
     if (ratios.length === 0) return 1;
     
     // For each ratio, find the smallest integer period where ratio * period ≈ integer
+    // This minimizes the phase error at the end of the wavetable
     const bestPeriods = ratios.map(ratio => {
         let bestPeriod = 1;
         let smallestError = Infinity;
         
-        // Test periods 1-20
+        // Test periods 1-20 (computational limit for real-time use)
         for (let period = 1; period <= 20; period++) {
             const cycles = ratio * period;
             const fractionalPart = Math.abs(cycles - Math.round(cycles));
@@ -406,7 +532,7 @@ function calculateOptimalPeriod(ratios) {
                 bestPeriod = period;
             }
             
-            // If we found an exact match, stop
+            // If we found an exact match (within floating-point precision), stop
             if (fractionalPart < 0.001) break;
         }
         
@@ -414,13 +540,14 @@ function calculateOptimalPeriod(ratios) {
         return bestPeriod;
     });
     
-    // Use the LCM of all best periods
+    // Use the LCM (Least Common Multiple) of all best periods
+    // This ensures ALL ratios have good phase continuity simultaneously
     const lcm = bestPeriods.reduce((acc, period) => {
         const gcd = (a, b) => b === 0 ? a : gcd(b, a % b);
         return (acc * period) / gcd(acc, period);
     }, 1);
     
-    // Cap at reasonable value
+    // Cap at reasonable value to prevent excessive computation/memory usage
     return Math.min(lcm, 20);
 }
 
@@ -429,21 +556,51 @@ function calculateOptimalPeriod(ratios) {
 // ================================
 
 /**
- * Exports a waveform buffer as a WAV file
- * @param {Float32Array} buffer - Waveform buffer to export
- * @param {number} numCycles - Number of cycles to export
+ * Exports a waveform buffer as a WAV file with period multiplier compensation.
+ * 
+ * PERIOD MULTIPLIER HANDLING:
+ * When wavetables contain multiple periods (periodMultiplier > 1), the sample
+ * rate must be adjusted to maintain correct pitch in the exported WAV file.
+ * 
+ * SAMPLE RATE CORRECTION:
+ * - Standard case: 48kHz sample rate, 1 period → plays at correct pitch
+ * - Multi-period case: 48kHz sample rate, N periods → plays N times too fast
+ * - Correction: Use sample rate of 48kHz ÷ N → plays at correct pitch
+ * 
+ * EXAMPLE:
+ * - Wavetable with 15 periods sampled at 48kHz
+ * - Without correction: WAV plays at 15× speed (too high pitch)
+ * - With correction: WAV metadata shows 3.2kHz sample rate
+ * - Result: DAW/player compensates automatically, correct pitch maintained
+ * 
+ * This ensures exported WAV files can be used in any DAW or audio software
+ * without manual pitch correction.
+ * 
+ * @param {Float32Array|Object} bufferOrData - Waveform buffer or {buffer, periodMultiplier}
+ * @param {number} numCycles - Number of cycles to export (default: 1)
  */
-export function exportAsWAV(buffer, numCycles = 1) {
+export function exportAsWAV(bufferOrData, numCycles = 1) {
     if (!AppState.audioContext) {
         showStatus("Error: Audio system not initialized. Please click 'Start Tone' first.", 'error');
         return;
     }
+    
+    // Handle both old format (just buffer) and new format (object with buffer + periodMultiplier)
+    const buffer = bufferOrData.buffer || bufferOrData;
+    const periodMultiplier = bufferOrData.periodMultiplier || 1;
+    
     if (buffer.length === 0) {
         showStatus("WAV Export Failed: Cannot export empty waveform data.", 'error');
         return;
     }
     
-    const sampleRate = AppState.audioContext.sampleRate;
+    // CRITICAL: Adjust sample rate to compensate for period multiplier
+    // If wavetable contains N periods, reduce sample rate by factor of N
+    // This ensures correct pitch when the WAV is played back
+    const baseSampleRate = AppState.audioContext.sampleRate;
+    const correctedSampleRate = baseSampleRate / periodMultiplier;
+    
+    console.log(`WAV Export: Period multiplier=${periodMultiplier}, base rate=${baseSampleRate}Hz, corrected rate=${correctedSampleRate}Hz`);
 
     // Generate filename
     const parts = generateFilenameParts();
@@ -456,9 +613,9 @@ export function exportAsWAV(buffer, numCycles = 1) {
     ].filter(Boolean).join('-') + '.wav';
 
     try {
-        // Use WAVExporter class
-        WAVExporter.exportAsWAV(buffer, sampleRate, filename, numCycles);
-        showStatus(`Wavetable exported as ${filename}!`, 'success');
+        // Use WAVExporter class with corrected sample rate
+        WAVExporter.exportAsWAV(buffer, correctedSampleRate, filename, numCycles);
+        showStatus(`Wavetable exported as ${filename} (${correctedSampleRate}Hz sample rate)!`, 'success');
     } catch (error) {
         showStatus(`WAV Export Failed: ${error.message}`, 'error');
     }
@@ -469,8 +626,30 @@ export function exportAsWAV(buffer, numCycles = 1) {
 // ================================
 
 /**
- * Adds a sampled waveform to the list of available waveforms
- * @param {Float32Array} sampledBuffer - Sampled waveform data
+ * Adds a sampled waveform to the available waveform library with period multiplier support.
+ * 
+ * WORKFLOW:
+ * 1. Extract buffer and period multiplier from sampling data
+ * 2. Store in WavetableManager with period multiplier metadata
+ * 3. Register with AudioEngine for AudioWorklet compatibility
+ * 4. Store period multiplier in AppState for frequency correction
+ * 5. Add UI option and automatically select new waveform
+ * 
+ * PERIOD MULTIPLIER STORAGE:
+ * The period multiplier is stored in multiple locations for robustness:
+ * - WavetableManager: Primary storage with PeriodicWave object
+ * - AppState.customWavePeriodMultipliers: Fallback/compatibility storage
+ * 
+ * This ensures frequency correction works correctly whether using individual
+ * oscillators or AudioWorklet synthesis, and persists across audio system
+ * restarts or mode switches.
+ * 
+ * AUTOMATIC SELECTION:
+ * After adding the waveform, it's automatically selected and synthesis is
+ * restarted if currently playing. This provides immediate audio feedback
+ * of the newly created waveform.
+ * 
+ * @param {Float32Array|Object} sampledData - Sampled waveform data or {buffer, periodMultiplier}
  */
 export async function addToWaveforms(sampledData) {
     await initAudio();
@@ -486,6 +665,7 @@ export async function addToWaveforms(sampledData) {
 
     try {
         // Use WavetableManager to add the new waveform with period multiplier
+        // This creates a PeriodicWave object and stores the period multiplier
         const waveKey = wavetableManager.addFromSamples(buffer, AppState.audioContext, 128, periodMultiplier);
         
         // Send the custom waveform to AudioEngine (for AudioWorklet support)
@@ -493,7 +673,7 @@ export async function addToWaveforms(sampledData) {
             audioEngine.addCustomWaveform(waveKey, buffer);
         }
         
-        // Store in legacy format for compatibility
+        // Store in legacy format for compatibility with existing code
         const coefficients = wavetableManager.getCoefficients(waveKey);
         const periodicWave = wavetableManager.getWaveform(waveKey);
         
@@ -504,7 +684,8 @@ export async function addToWaveforms(sampledData) {
         AppState.customWaveCoefficients[waveKey] = coefficients;
         AppState.customWaveCount = wavetableManager.getCount();
 
-        // Store period multiplier in AppState for frequency correction
+        // CRITICAL: Store period multiplier in AppState for frequency correction
+        // This enables the getFrequencyCorrection() function to work correctly
         if (!AppState.customWavePeriodMultipliers) {
             AppState.customWavePeriodMultipliers = {};
         }

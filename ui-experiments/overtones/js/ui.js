@@ -91,7 +91,7 @@ function handleExportWAV() {
     sampleCurrentWaveform().then(sampledData => {
         const buffer = sampledData.buffer || sampledData; // Handle both old and new format
         if (buffer.length > 0) {
-            exportAsWAV(buffer, 1);
+            exportAsWAV(sampledData, 1); // Pass full data object (includes periodMultiplier)
         }
     }).catch(error => {
         console.error('Failed to sample waveform for export:', error);

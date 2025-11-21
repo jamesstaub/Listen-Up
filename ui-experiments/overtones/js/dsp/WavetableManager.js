@@ -1,6 +1,26 @@
 /**
  * WAVETABLE MANAGER CLASS
- * Manages custom waveforms, their coefficients, and storage
+ * 
+ * Manages custom waveforms with advanced period multiplier support for phase continuity.
+ * 
+ * CORE FUNCTIONALITY:
+ * - Creates Web Audio PeriodicWave objects from time-domain samples
+ * - Stores associated period multipliers for frequency correction
+ * - Maintains both frequency-domain coefficients and time-domain reconstruction
+ * - Provides serialization/deserialization for waveform persistence
+ * 
+ * PERIOD MULTIPLIER SYSTEM:
+ * This manager is central to the period multiplier algorithm that solves phase
+ * discontinuity artifacts in irrational tuning systems. It stores the period
+ * multiplier alongside each waveform, enabling automatic pitch correction.
+ * 
+ * STORAGE ARCHITECTURE:
+ * - waveforms: Map<string, PeriodicWave> - Web Audio objects for synthesis
+ * - coefficients: Map<string, {real, imag}> - Fourier coefficients for reconstruction
+ * - periodMultipliers: Map<string, number> - Period multipliers for pitch correction
+ * 
+ * The three maps maintain synchronized data for each waveform key, ensuring
+ * consistent behavior across different audio synthesis modes.
  */
 
 import { DFT } from './DFT.js';
@@ -15,12 +35,28 @@ export class WavetableManager {
     }
     
     /**
-     * Adds a new custom waveform from time-domain samples
-     * @param {Float32Array} samples - Time-domain samples
-     * @param {AudioContext} context - Web Audio context
-     * @param {number} maxHarmonics - Maximum harmonics to analyze
-     * @param {number} periodMultiplier - Period multiplier for pitch correction
-     * @returns {string} Unique key for the new waveform
+     * Adds a new custom waveform from time-domain samples with period multiplier support.
+     * 
+     * WORKFLOW:
+     * 1. Validates input samples for non-empty data
+     * 2. Performs DFT to extract frequency-domain coefficients
+     * 3. Creates Web Audio PeriodicWave object for synthesis
+     * 4. Stores waveform, coefficients, and period multiplier with unique key
+     * 
+     * PERIOD MULTIPLIER INTEGRATION:
+     * The period multiplier is crucial metadata that indicates how many fundamental
+     * periods are packed into the wavetable buffer. This enables the frequency
+     * correction system to compensate for the packed periods during playback.
+     * 
+     * UNIQUE KEY GENERATION:
+     * Uses timestamp-based keys (custom_<timestamp>) to ensure uniqueness across
+     * multiple waveform creation sessions without conflicts.
+     * 
+     * @param {Float32Array} samples - Time-domain samples (typically 2048 points)
+     * @param {AudioContext} context - Web Audio context for PeriodicWave creation
+     * @param {number} maxHarmonics - Maximum harmonics for DFT analysis (default: 128)
+     * @param {number} periodMultiplier - Number of periods in the wavetable (default: 1)
+     * @returns {string} Unique key for accessing the stored waveform
      */
     addFromSamples(samples, context, maxHarmonics = 128, periodMultiplier = 1) {
         if (samples.length === 0) {
@@ -30,14 +66,14 @@ export class WavetableManager {
         // Perform DFT to extract frequency components
         const { real, imag } = DFT.transform(samples, maxHarmonics);
         
-        // Create PeriodicWave
+        // Create PeriodicWave for Web Audio synthesis
         const periodicWave = WaveformGenerator.createCustomWaveform(context, real, imag);
         
-        // Generate unique key
+        // Generate unique key using timestamp for collision avoidance
         this.count++;
-        const key = `custom_${this.count}`;
+        const key = `custom_${Date.now()}_${this.count}`;
         
-        // Store waveform, coefficients, and period multiplier
+        // Store all associated data: waveform, coefficients, and period multiplier
         this.waveforms.set(key, periodicWave);
         this.coefficients.set(key, { real, imag });
         this.periodMultipliers.set(key, periodMultiplier);
@@ -86,9 +122,22 @@ export class WavetableManager {
     }
     
     /**
-     * Gets the period multiplier for pitch correction
-     * @param {string} key - Waveform key
-     * @returns {number} Period multiplier (1 if not found)
+     * Retrieves the period multiplier for a stored waveform.
+     * 
+     * CRITICAL FUNCTION:
+     * This method enables the frequency correction system by providing the period
+     * multiplier value needed to calculate the correct playback frequency.
+     * 
+     * USAGE CONTEXT:
+     * Called by getFrequencyCorrection() in audio.js to determine how much to
+     * scale the frequency when using custom waveforms with multiple periods.
+     * 
+     * FALLBACK BEHAVIOR:
+     * Returns 1 for unknown keys, ensuring that missing or standard waveforms
+     * don't cause frequency correction issues.
+     * 
+     * @param {string} key - Waveform key (e.g., 'custom_1732189423456_1')
+     * @returns {number} Period multiplier (1 if not found or for standard waveforms)
      */
     getPeriodMultiplier(key) {
         return this.periodMultipliers.get(key) || 1;
