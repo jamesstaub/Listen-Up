@@ -9,5 +9,5 @@ app.use(express.static(path.join(__dirname)));
 
 // Start server
 app.listen(PORT, () => {
-    console.log(`🎵 Spectral Audio Synthesizer server running at http://localhost:${PORT}`);
+    console.log(`🎵 Sine Language server running at http://localhost:${PORT}`);
 });

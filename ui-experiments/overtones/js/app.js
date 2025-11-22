@@ -18,29 +18,21 @@ import { initUI, updateUI, setupAccessibility } from './ui.js';
  * Main application initialization function
  */
 function initApp() {
-    try {
-        // Initialize modules in order
-        console.log('Initializing Spectral Audio Synthesizer...');
-        
+    try {        
         // Initialize UI components
         initUI();
-        console.log('✓ UI initialized');
         
         // Initialize visualization
         initVisualization();
-        console.log('✓ Visualization initialized');
         
         // Set up accessibility features
         setupAccessibility();
-        console.log('✓ Accessibility features enabled');
         
         // Update UI to reflect initial state
         updateUI();
-        console.log('✓ UI state synchronized');
         
         // Show ready status
         showStatus('Spectral Audio Synthesizer ready! Click "Start Tone" to begin.', 'success');
-        console.log('✓ Application fully initialized');
         
     } catch (error) {
         console.error('Failed to initialize application:', error);
@@ -175,9 +167,7 @@ function checkCompatibility() {
 /**
  * Main startup function
  */
-function startup() {
-    console.log('Starting Spectral Audio Synthesizer v5...');
-    
+function startup() {    
     // Setup error handling first
     setupErrorHandling();
     
