@@ -59,8 +59,8 @@ export function initUI() {
 // ================================
 
 function setupMainButtons() {
-    // Play/Stop button
-    setupEventListener('play-button', 'click', handlePlayToggle);
+    // Play/Stop toggle (new navbar toggle)
+    setupEventListener('play-toggle', 'click', handlePlayToggle);
     
     // Export WAV button
     setupEventListener('export-wav-button', 'click', handleExportWAV);
@@ -70,16 +70,20 @@ function setupMainButtons() {
 }
 
 async function handlePlayToggle() {
-    const button = document.getElementById('play-button');
+    const toggle = document.getElementById('play-toggle');
+    const playLabel = document.getElementById('play-label');
+    
     if (AppState.isPlaying) {
         stopTone();
-        button.textContent = "Start Tone";
-        button.classList.remove('playing');
+        toggle.classList.remove('active');
+        toggle.setAttribute('aria-checked', 'false');
+        playLabel.textContent = "Play";
     } else {
         try {
             await startTone();
-            button.textContent = "Stop Tone";
-            button.classList.add('playing');
+            toggle.classList.add('active');
+            toggle.setAttribute('aria-checked', 'true');
+            playLabel.textContent = "Stop";
         } catch (error) {
             console.error('Failed to start tone:', error);
             showStatus('Failed to start audio. Please check browser permissions.', 'error');
@@ -313,14 +317,36 @@ function handleSystemChange(e) {
     
     // Use smooth system update with UI update callback
     smoothUpdateSystem(systemIndex, () => {
-        // Update UI after the system state has actually changed
+        // Resize amplitudes to match new system
+        const numPartials = spectralSystems[systemIndex].ratios.length;
+        const oldAmps = AppState.harmonicAmplitudes || [];
+        const newAmps = [];
+        for (let i = 0; i < numPartials; i++) {
+            if (typeof oldAmps[i] === 'number') {
+                newAmps[i] = oldAmps[i];
+            } else {
+                newAmps[i] = (i === 0 ? 1.0 : 0.0);
+            }
+        }
+        // If switching to a system with more partials, initialize new drawbars to 0
+        for (let i = oldAmps.length; i < numPartials; i++) {
+            newAmps[i] = (i === 0 ? 1.0 : 0.0);
+        }
+        AppState.harmonicAmplitudes = newAmps;
+
+        // Redraw drawbars and update all UI
+        setupDrawbars();
         updateDrawbarLabels();
         updateSystemDescription();
+        updateUI();
+        if (AppState.p5Instance && typeof AppState.p5Instance.redraw === 'function') {
+            AppState.p5Instance.redraw();
+        }
     });
 }
 
 function updateSystemDescription() {
-    updateText('system-description', AppState.currentSystem.description);
+    updateText('system-description', AppState.currentSystem.description, true);
 }
 
 // ================================
@@ -395,31 +421,42 @@ function setupDrawbars() {
     const container = document.getElementById('drawbars');
     if (!container) return;
 
-    container.innerHTML = ''; // Clear existing drawbars
+    container.innerHTML = '';
+    const numPartials = AppState.currentSystem.ratios.length;
 
-    for (let i = 0; i < AppState.harmonicAmplitudes.length; i++) {
+    // Resize harmonicAmplitudes to match current system, preserving values where possible
+    const oldAmps = AppState.harmonicAmplitudes || [];
+    const newAmps = [];
+    for (let i = 0; i < numPartials; i++) {
+        newAmps[i] = typeof oldAmps[i] === 'number' ? oldAmps[i] : (i === 0 ? 1.0 : 0.0);
+    }
+    AppState.harmonicAmplitudes = newAmps;
+
+    for (let i = 0; i < numPartials; i++) {
         const drawbar = createDrawbar(i);
         container.appendChild(drawbar);
     }
 }
 
 function createDrawbar(index) {
-    const styleClass = DRAWBAR_STYLES[index];
+    const styleClass = DRAWBAR_STYLES[index] || 'white';
     const initialValue = AppState.harmonicAmplitudes[index];
 
     const drawbarDiv = document.createElement('div');
     drawbarDiv.className = `drawbar ${styleClass}`;
-    
+
     const labelSpan = document.createElement('span');
     labelSpan.className = 'drawbar-label';
     labelSpan.id = `drawbar-label-${index}`;
-    
+    // Use system label for this partial
+    labelSpan.textContent = AppState.currentSystem.labels[index] || '';
+
     const inputWrapper = document.createElement('div');
     inputWrapper.className = 'drawbar-input-wrapper';
-    
+
     const trackDiv = document.createElement('div');
     trackDiv.className = 'drawbar-track';
-    
+
     const input = document.createElement('input');
     input.type = 'range';
     input.className = 'drawbar-slider';
@@ -428,14 +465,14 @@ function createDrawbar(index) {
     input.step = '0.01';
     input.value = initialValue;
     input.dataset.index = index;
-    
+
     input.addEventListener('input', handleDrawbarChange);
 
     inputWrapper.appendChild(trackDiv);
     inputWrapper.appendChild(input);
     drawbarDiv.appendChild(labelSpan);
     drawbarDiv.appendChild(inputWrapper);
-    
+
     return drawbarDiv;
 }
 
@@ -448,12 +485,10 @@ function handleDrawbarChange(e) {
 }
 
 function updateDrawbarLabels() {
-    AppState.currentSystem.ratios.forEach((ratio, index) => {
+    AppState.currentSystem.labels.forEach((label, index) => {
         const labelElement = document.getElementById(`drawbar-label-${index}`);
         if (labelElement) {
-            const preciseRatio = ratio.toFixed(AppState.currentSystem.labelPrecision);
-            const labelText = AppState.isSubharmonic ? `1/${preciseRatio}x` : `${preciseRatio}x`;
-            labelElement.textContent = labelText;
+            labelElement.textContent = label;
         }
     });
 }

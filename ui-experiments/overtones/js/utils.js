@@ -156,10 +156,14 @@ export function setupEventListener(elementId, event, handler) {
  * @param {string} elementId - Element ID
  * @param {string} text - Text content to set
  */
-export function updateText(elementId, text) {
+export function updateText(elementId, text, html = false) {
     const element = getElement(elementId);
     if (element) {
-        element.textContent = text;
+        if (html) {
+            element.innerHTML = text;
+        } else {
+            element.textContent = text;
+        }
     }
 }
 

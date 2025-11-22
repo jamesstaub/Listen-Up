@@ -179,43 +179,37 @@ async function startToneWithOscillators() {
     // Clear any existing oscillators
     AppState.oscillators = [];
     
-    // Create oscillators for all harmonics
-    for (let i = 0; i < AppState.currentSystem.ratios.length; i++) {
-        const ratio = AppState.currentSystem.ratios[i];
-        const amplitude = AppState.harmonicAmplitudes[i] || 0;
-        
-        if (ratio > 0) {
-            const frequency = calculateFrequency(ratio);
-            const gain = amplitude * AppState.masterGainValue;
-            const waveform = resolveWaveform(AppState.currentWaveform);
-            
-            // CRITICAL: Apply frequency correction for custom waveforms with period multipliers
-            // If the wavetable contains N periods, we must play at frequency × (1/N) to get correct pitch
-            // This compensates for the multi-period wavetables created by the period multiplier algorithm
-            const frequencyCorrection = getFrequencyCorrection(AppState.currentWaveform);
-            const correctedFrequency = frequency * frequencyCorrection;
-            
-            console.log(`Oscillator ${i}: base freq=${frequency}Hz, correction=${frequencyCorrection}, final=${correctedFrequency}Hz`);
-            
-            try {
-                const oscData = audioEngine.createOscillator(correctedFrequency, waveform, gain);
-                const oscKey = `harmonic_${i}`;
-                audioEngine.addOscillator(oscKey, oscData);
-                
-                // Ensure array is properly sized
-                while (AppState.oscillators.length <= i) {
-                    AppState.oscillators.push(null);
+    // Create oscillators for all harmonics in the current system
+    const numPartials = AppState.currentSystem.ratios.length;
+    for (let i = 0; i < AppState.harmonicAmplitudes.length; i++) {
+        if (i < numPartials) {
+            const ratio = AppState.currentSystem.ratios[i];
+            const amplitude = AppState.harmonicAmplitudes[i] || 0;
+            if (ratio > 0) {
+                const frequency = calculateFrequency(ratio);
+                const gain = amplitude * AppState.masterGainValue;
+                const waveform = resolveWaveform(AppState.currentWaveform);
+                const frequencyCorrection = getFrequencyCorrection(AppState.currentWaveform);
+                const correctedFrequency = frequency * frequencyCorrection;
+                console.log(`Oscillator ${i}: base freq=${frequency}Hz, correction=${frequencyCorrection}, final=${correctedFrequency}Hz`);
+                try {
+                    const oscData = audioEngine.createOscillator(correctedFrequency, waveform, gain);
+                    const oscKey = `harmonic_${i}`;
+                    audioEngine.addOscillator(oscKey, oscData);
+                    while (AppState.oscillators.length <= i) {
+                        AppState.oscillators.push(null);
+                    }
+                    AppState.oscillators[i] = { key: oscKey, ratio: ratio };
+                } catch (error) {
+                    console.error(`Failed to create oscillator ${i}:`, error);
+                    AppState.oscillators[i] = null;
                 }
-                
-                AppState.oscillators[i] = { 
-                    key: oscKey,
-                    ratio: ratio
-                };
-            } catch (error) {
-                console.error(`Failed to create oscillator ${i}:`, error);
+            } else {
                 AppState.oscillators[i] = null;
             }
         } else {
+            // Hide extra oscillators and set gain to 0
+            AppState.harmonicAmplitudes[i] = 0;
             AppState.oscillators[i] = null;
         }
     }
@@ -266,16 +260,17 @@ function updateAudioPropertiesOscillators(rampTime) {
         if (node && node.key) {
             const ratio = AppState.currentSystem.ratios[i];
             const baseFreq = calculateFrequency(ratio);
-            
-            // Apply frequency correction for period multiplier compensation
-            // This ensures custom waveforms maintain correct pitch during real-time updates
             const frequencyCorrection = getFrequencyCorrection(AppState.currentWaveform);
             const newFreq = baseFreq * frequencyCorrection;
             const amplitude = AppState.harmonicAmplitudes[i] || 0;
-            const newGain = amplitude * AppState.masterGainValue;
+            let newGain = amplitude * AppState.masterGainValue;
 
-            // Use AudioEngine methods for smooth updates
-            audioEngine.updateOscillatorFrequency(node.key, newFreq, rampTime);
+            // Prevent non-finite frequency values
+            if (!isFinite(newFreq) || isNaN(newFreq)) {
+                newGain = 0;
+            } else {
+                audioEngine.updateOscillatorFrequency(node.key, newFreq, rampTime);
+            }
             audioEngine.updateOscillatorGain(node.key, newGain, rampTime);
         }
     });

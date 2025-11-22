@@ -35,9 +35,9 @@ export function createVisualizationSketch() {
         // ================================
 
         p.setup = function() {
-            const container = document.getElementById('canvas-container');
-            let w = container.clientWidth;
-            let h = window.innerWidth < 640 ? 500 : 700;
+            const container = document.getElementById('tonewheel-container');
+            let w = container ? container.clientWidth - 40 : 800; // Account for padding
+            let h = window.innerWidth < 640 ? 300 : 400; // Slightly smaller height
             
             // Fallback if container width is 0
             if (w === 0) {
@@ -45,7 +45,7 @@ export function createVisualizationSketch() {
                 console.warn('Canvas container width was 0, using fallback width:', w);
             }
             
-            p.createCanvas(w, h).parent('canvas-container');
+            p.createCanvas(w, h).parent(container ? 'tonewheel-container' : 'body');
             p.angleMode(p.RADIANS);
             
             updateDimensions();
@@ -328,7 +328,8 @@ export function createVisualizationSketch() {
             updateDimensions();
             
             drawRadialDisplay();
-            drawOscilloscope();
+            // Temporarily disable oscilloscope to focus on tonewheel
+            // drawOscilloscope(); 
         };
 
         // ================================
@@ -348,9 +349,9 @@ export function createVisualizationSketch() {
         // ================================
 
         p.windowResized = function() {
-            const container = document.getElementById('canvas-container');
-            let w = container.clientWidth;
-            let h = window.innerWidth < 640 ? 500 : 700;
+            const container = document.getElementById('tonewheel-container');
+            let w = container ? container.clientWidth - 40 : 800;
+            let h = window.innerWidth < 640 ? 500 : 600;
             
             // Fallback if container width is 0
             if (w === 0) {
@@ -397,6 +398,67 @@ export function clearCustomWaveCache() {
     }
 }
 
+// Create a separate p5 sketch for the linear waveform (oscilloscope)
+function createWaveformSketch() {
+    return function(p) {
+        p.setup = function() {
+            const container = document.getElementById('waveform-canvas-area');
+            const w = container ? Math.max(300, container.clientWidth - 40) : 400;
+            const h = 150;
+            p.createCanvas(w, h).parent(container ? 'waveform-canvas-area' : document.body);
+        };
+
+        p.windowResized = function() {
+            const container = document.getElementById('waveform-canvas-area');
+            const w = container ? Math.max(300, container.clientWidth - 40) : 400;
+            const h = 150;
+            p.resizeCanvas(w, h);
+        };
+
+        p.draw = function() {
+            p.background('#0d131f');
+
+            // Draw oscilloscope using main p5 instance's waveform functions
+            const mainP5 = AppState.p5Instance;
+            const oscHeight = p.height;
+            const ampScale = oscHeight * 0.4;
+
+            // Background box
+            p.noStroke();
+            p.fill('#0d131f');
+            p.rect(0, 0, p.width, p.height);
+
+            // Center line
+            p.stroke('#374151');
+            p.strokeWeight(1);
+            p.line(0, oscHeight / 2, p.width, oscHeight / 2);
+
+            if (!mainP5 || !mainP5.getWaveValue) return;
+
+            p.stroke('#10b981');
+            p.strokeWeight(2);
+            p.noFill();
+            p.beginShape();
+            const points = p.width;
+            for (let x = 0; x < points; x++) {
+                const theta = p.map(x, 0, points, 0, p.TWO_PI * 2);
+                let summedWave = 0;
+                let maxPossibleAmp = 0;
+                for (let hIdx = 0; hIdx < AppState.harmonicAmplitudes.length; hIdx++) {
+                    const ratio = AppState.currentSystem.ratios[hIdx];
+                    const amp = AppState.harmonicAmplitudes[hIdx] || 0;
+                    summedWave += mainP5.getWaveValue(AppState.currentWaveform, ratio * theta) * amp;
+                    maxPossibleAmp += amp;
+                }
+                const normalizedWave = summedWave / (maxPossibleAmp || 1);
+                const y = oscHeight / 2 - normalizedWave * ampScale;
+                p.vertex(x, y);
+            }
+            p.endShape();
+        };
+    };
+}
+
 // ================================
 // INITIALIZATION
 // ================================
@@ -405,6 +467,19 @@ export function clearCustomWaveCache() {
  * Initializes the visualization system
  */
 export function initVisualization() {
-    const sketch = createVisualizationSketch();
-    new p5(sketch);
+    // Create the tonewheel sketch and attach to its container
+    const tonewheelSketch = createVisualizationSketch();
+    new p5(tonewheelSketch, 'tonewheel-container');
+
+    // Defer creation of the waveform sketch until the main p5 instance is available
+    const tryCreateWaveform = () => {
+        if (AppState.p5Instance && AppState.p5Instance.getWaveValue) {
+            const waveformSketch = createWaveformSketch();
+            new p5(waveformSketch, 'waveform-canvas-area');
+        } else {
+            // Retry shortly; ensures main p5 has set AppState.p5Instance
+            setTimeout(tryCreateWaveform, 100);
+        }
+    };
+    tryCreateWaveform();
 }

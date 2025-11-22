@@ -22,7 +22,7 @@ export class AudioEngine {
      * @param {number} masterGainValue - Initial master gain value
      * @param {Object} options - Configuration options (for compatibility)
      */
-    async initialize(masterGainValue = 0.3, options = {}) {
+    async initialize(masterGainValue = 0.5, options = {}) {
         if (this.isInitialized) return;
         
         // Create audio context
