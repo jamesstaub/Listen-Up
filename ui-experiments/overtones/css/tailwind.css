@@ -60,7 +60,6 @@
     font-weight: 600;
     color: rgb(203 213 225);
     white-space: nowrap;
-    min-width: 80px;
   }
   
   /* Toggle Components */
@@ -75,7 +74,7 @@
   }
   
   .toggle-switch {
-    width: 50px;
+    min-width: 50px;
     height: 28px;
     border-radius: 14px;
     position: relative;
@@ -296,13 +295,13 @@
     min-height: auto;
   }
   
-  .canvas-container,
+  /* .canvas-container,
   .waveform-container {
     flex: none;
     max-width: none;
     min-width: 300px;
     width: 100%;
-  }
+  } */
   
   .navbar {
     padding: 0 1rem;
@@ -310,10 +309,10 @@
 }
 
 @media (max-width: 480px) {
-  .canvas-container,
+  /* .canvas-container,
   .waveform-container {
     min-width: 280px;
-  }
+  } */
   
   .visualization-section {
     gap: 1rem;

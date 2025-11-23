@@ -30,10 +30,7 @@ function initApp() {
         
         // Update UI to reflect initial state
         updateUI();
-        
-        // Show ready status
-        showStatus('Spectral Audio Synthesizer ready! Click "Start Tone" to begin.', 'success');
-        
+                
     } catch (error) {
         console.error('Failed to initialize application:', error);
         showStatus('Failed to initialize application. Please refresh the page.', 'error');

@@ -48,7 +48,7 @@ export function createVisualizationSketch() {
             p.createCanvas(w, h).parent(container ? 'tonewheel-container' : 'body');
             p.angleMode(p.RADIANS);
             updateDimensions();
-            showStatus("Visualization initialized. Ready to play and export.", 'info');
+            
         };
 
         // ================================
