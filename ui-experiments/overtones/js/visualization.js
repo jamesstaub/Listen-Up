@@ -16,10 +16,11 @@ import { showStatus } from './utils.js';
 // VISUALIZATION STATE
 // ================================
 
-let spreadFactor = 0.2;
+let spreadFactor = 1;
 let baseRadius;
 let maxAmplitudeRadial;
-const baseRadiusRatio = 0.25;
+const baseRadiusRatio = 0.08; // Smaller fundamental, more spread
+const VISUALIZER_AMPLITUDE_SCALE = 4.5; // Increase for more definition
 
 // ================================
 // P5.JS SKETCH CONFIGURATION
@@ -36,18 +37,16 @@ export function createVisualizationSketch() {
 
         p.setup = function() {
             const container = document.getElementById('tonewheel-container');
-            let w = container ? container.clientWidth - 40 : 800; // Account for padding
-            let h = window.innerWidth < 640 ? 300 : 400; // Slightly smaller height
-            
-            // Fallback if container width is 0
+            let w = container ? container.clientWidth : 800;
+            // Always square
+            let h = w;
             if (w === 0) {
                 w = window.innerWidth < 640 ? 320 : 800;
+                h = w;
                 console.warn('Canvas container width was 0, using fallback width:', w);
             }
-            
             p.createCanvas(w, h).parent(container ? 'tonewheel-container' : 'body');
             p.angleMode(p.RADIANS);
-            
             updateDimensions();
             showStatus("Visualization initialized. Ready to play and export.", 'info');
         };
@@ -157,10 +156,9 @@ export function createVisualizationSketch() {
         // ================================
 
         function drawRadialDisplay() {
-            const radialHeight = p.height * CANVAS_HEIGHT_RATIOS.RADIAL;
-            
+            // Use full canvas for radial display, always centered
             p.push();
-            p.translate(p.width / 2, radialHeight / 2);
+            p.translate(p.width / 2, p.height / 2);
 
             // Draw base circle
             p.noFill();
@@ -168,69 +166,47 @@ export function createVisualizationSketch() {
             p.ellipse(0, 0, baseRadius * 2, baseRadius * 2);
 
             const points = 360;
-            // Convert visualization frequency (Hz) to rotation speed (radians per frame)
-            // At 60 FPS, 1 Hz = 2π/60 radians per frame
             let rotationSpeed = (AppState.visualizationFrequency * p.TWO_PI) / 60;
             let currentAngle = p.frameCount * rotationSpeed;
 
-            // 1. Draw Individual Partials
             drawIndividualPartials(points, currentAngle);
-
-            // 2. Draw the Final Summed Waveform
             drawSummedWaveform(points, currentAngle);
-
             p.pop();
         }
 
         function drawIndividualPartials(points, currentAngle) {
-            for (let h = 0; h < AppState.harmonicAmplitudes.length; h++) {
-                const ratio = AppState.currentSystem.ratios[h];
-                const amp = AppState.harmonicAmplitudes[h] * maxAmplitudeRadial * (1 / 12);
-                
-                // Calculate radial offset with proper spacing to prevent overlap at max spread
-                let radialOffset = 0;
-                if (spreadFactor > 0) {
-                    const maxWaveAmplitude = maxAmplitudeRadial * (1 / 12);
-                    const spacingBuffer = maxWaveAmplitude * 2.5;
-                    const totalAvailableSpace = maxAmplitudeRadial * 0.8;
-                    const activeHarmonics = AppState.harmonicAmplitudes.filter(a => a > 0.005).length;
-                    
-                    if (activeHarmonics > 1) {
-                        const maxSpacing = totalAvailableSpace / (activeHarmonics - 1);
-                        const actualSpacing = Math.min(spacingBuffer, maxSpacing);
-                        
-                        // Count active harmonics before this one
-                        let activeIndex = 0;
-                        for (let i = 0; i < h; i++) {
-                            if (AppState.harmonicAmplitudes[i] > 0.005) activeIndex++;
-                        }
-                        
-                        // Only apply offset if this harmonic is active
-                        if (AppState.harmonicAmplitudes[h] > 0.005) {
-                            radialOffset = actualSpacing * activeIndex * spreadFactor;
-                        }
-                    }
-                }
+            // Draw each harmonic as a concentric ring, lowest frequency in center
+            const numHarmonics = AppState.harmonicAmplitudes.length;
+            // Spread factor increases spacing between rings
+            const minSpread = 0.7;
+            const spread = minSpread + spreadFactor * (1.0 - minSpread);
+            const ringSpacing = (maxAmplitudeRadial * 0.95 * spread) / numHarmonics;
+            for (let h = 0; h < numHarmonics; h++) {
+        // Spread factor control for UI
+        p.setSpreadFactor = function(value) {
+            spreadFactor = value;
+        };
 
+        p.getSpreadFactor = function() {
+            return spreadFactor;
+        };
+                const ratio = AppState.currentSystem.ratios[h];
+                const amp = AppState.harmonicAmplitudes[h];
+                // Scale amplitude down for higher harmonics to prevent overlap, but add global scaling for definition
+                const amplitudeScale = VISUALIZER_AMPLITUDE_SCALE / (1 + h * 0.7);
+                const visualAmp = amp * amplitudeScale * ringSpacing * 0.8;
+                // Each ring is spaced outward
+                const ringRadius = baseRadius + h * ringSpacing;
                 if (amp > 0.005) {
                     p.stroke(p.color(HARMONIC_COLORS[h] + '99'));
                     p.strokeWeight(1.5);
                     p.noFill();
                     p.beginShape();
-                    
-                    let totalRadialBase = baseRadius + radialOffset;
-                    let visualizationRatio = ratio;
-                    let visualAmpScale = AppState.isSubharmonic ? (1 / ratio) : ratio;
-
                     for (let i = 0; i < points; i++) {
                         let theta = p.map(i, 0, points, 0, p.TWO_PI);
-                        
-                        // In subharmonic mode, multiply the visualization ratio to show more detail
-                        let adjustedRatio = AppState.isSubharmonic ? visualizationRatio * 3 : visualizationRatio;
+                        let adjustedRatio = AppState.isSubharmonic ? ratio * 3 : ratio;
                         let waveValue = p.getWaveValue(AppState.currentWaveform, adjustedRatio * theta + currentAngle);
-                        
-                        let r = totalRadialBase + waveValue * amp * visualAmpScale * 0.5;
-                        
+                        let r = ringRadius + waveValue * visualAmp;
                         let x = r * p.cos(theta);
                         let y = r * p.sin(theta);
                         p.vertex(x, y);
@@ -242,7 +218,7 @@ export function createVisualizationSketch() {
 
         function drawSummedWaveform(points, currentAngle) {
             p.strokeWeight(0);
-            p.fill(16, 185, 129, 37);
+            p.fill(16, 185, 129, 15);
             
             p.beginShape();
             for (let i = 0; i < points; i++) {
@@ -336,13 +312,7 @@ export function createVisualizationSketch() {
         // VISUALIZATION CONTROL FUNCTIONS
         // ================================
 
-        p.setSpreadFactor = function(value) {
-            spreadFactor = value;
-        };
-
-        p.getSpreadFactor = function() {
-            return spreadFactor;
-        };
+        // Spread factor logic removed
 
         // ================================
         // RESPONSIVENESS
@@ -350,14 +320,12 @@ export function createVisualizationSketch() {
 
         p.windowResized = function() {
             const container = document.getElementById('tonewheel-container');
-            let w = container ? container.clientWidth - 40 : 800;
-            let h = window.innerWidth < 640 ? 500 : 600;
-            
-            // Fallback if container width is 0
+            let w = container ? container.clientWidth : 800;
+            let h = w;
             if (w === 0) {
                 w = window.innerWidth < 640 ? 320 : 800;
+                h = w;
             }
-            
             p.resizeCanvas(w, h);
             updateDimensions();
         };
@@ -403,14 +371,14 @@ function createWaveformSketch() {
     return function(p) {
         p.setup = function() {
             const container = document.getElementById('waveform-canvas-area');
-            const w = container ? Math.max(300, container.clientWidth - 40) : 400;
+            const w = container ? container.clientWidth : 400;
             const h = 150;
             p.createCanvas(w, h).parent(container ? 'waveform-canvas-area' : document.body);
         };
 
         p.windowResized = function() {
             const container = document.getElementById('waveform-canvas-area');
-            const w = container ? Math.max(300, container.clientWidth - 40) : 400;
+            const w = container ? container.clientWidth : 400;
             const h = 150;
             p.resizeCanvas(w, h);
         };

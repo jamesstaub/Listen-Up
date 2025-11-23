@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sine Language</title>
+    <title>sin(lang)</title>
 
     <!-- External Dependencies -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
@@ -20,18 +20,17 @@
         <div class="navbar-section">
             <!-- Play/Stop Toggle -->
             <div class="play-toggle-container">
-                <span class="toggle-label stop">Stop</span>
+                <span id="play-label" class="toggle-label active">Play</span>
                 <div id="play-toggle" class="toggle-switch" role="switch" aria-checked="false"
                     aria-label="Play/Stop control">
                 </div>
-                <span id="play-label" class="toggle-label active">Play</span>
             </div>
         </div>
 
         <div class="navbar-section center">
             <!-- Master Gain Control -->
             <div class="navbar-control-group">
-                <label for="master-gain-slider" class="navbar-control-label">Master Gain</label>
+                <label for="master-gain-slider" class="navbar-control-label">Gain</label>
                 <input type="range" id="master-gain-slider" class="slider" min="0.01" max="1" step="0.01" value="0.5">
                 <span id="master-gain-value" class="control-value">50%</span>
             </div>
@@ -39,44 +38,12 @@
 
         <div class="navbar-section right">
             <!-- Future: hamburger menu button -->
-            <div class="text-lg font-semibold text-slate-200">Sine Language</div>
+            <div class="text-lg font-semibold text-slate-200">sin(lang)</div>
         </div>
     </nav>
 
-    <!-- Visualization Canvases -->
-    <div class="visualization-section">
-        <!-- Main Tonewheel Canvas -->
-        <div id="tonewheel-container" class="canvas-container">
-            <!-- Main tonewheel p5.js canvas will be injected here -->
-
-            <!-- Visualization Controls Overlay -->
-            <div class="controls-overlay">
-                <!-- Visualization Spread Control -->
-                <div class="labeled-control">
-                    <label for="spread-slider">
-                        Harmonic Spread
-                        <span id="spread-value">20%</span>
-                    </label>
-                    <input type="range" id="spread-slider" class="control-slider" min="0" max="1" step="0.01"
-                        value="0.2">
-                </div>
-
-                <!-- Visualization Frequency Control -->
-                <div class="labeled-control">
-                    <label for="viz-freq-slider">
-                        Animation Speed
-                        <span id="viz-freq-value">2.0 Hz</span>
-                    </label>
-                    <input type="range" id="viz-freq-slider" class="control-slider" min="0.1" max="10" step="0.1"
-                        value="2.0">
-                </div>
-            </div>
-        </div>
-    </div>
-
     <!-- Main Controls -->
     <div class="control-card">
-
         <div class="control-row">
             <!-- Waveform Selector -->
             <div class="labeled-control">
@@ -84,10 +51,10 @@
                     Waveform
                 </label>
                 <select id="waveform-select" class="control-select">
-                    <option value="sine">Sine (Pure Additive)</option>
-                    <option value="square">Square (Band-Limited)</option>
-                    <option value="triangle">Triangle (Band-Limited)</option>
-                    <option value="sawtooth">Sawtooth (Band-Limited)</option>
+                    <option value="sine">Sine</option>
+                    <option value="square">Square</option>
+                    <option value="triangle">Triangle</option>
+                    <option value="sawtooth">Sawtooth</option>
                 </select>
             </div>
 
@@ -120,50 +87,97 @@
             </div>
         </div>
     </div>
-    <div class="control-row flex flex-wrap gap-4">
-        <div class="labeled-control lg:w-1/2 w-full">
-            <div class="flex">
-                <div class="flex flex-col gap-2 p-2 w-1/2">
-                    <div class="system-selector">
-                        <label for="ratio-system-select" class="text-[1.125rem] font-bold text-[#c7d2fe]">
-                            Overtone System
-                        </label>
-                        <select id="ratio-system-select" class="control-select">
-                            <!-- Options will be populated by JavaScript -->
-                        </select>
-                    </div>
 
+    <div class="control-card">
+        <div class="control-row flex flex-wrap gap-4">
+            <div class="w-full xl:grid xl:grid-cols-3 xl:gap-6 flex flex-col md:flex-row md:gap-4 gap-4">
+                <!-- Overtone System (title + select) -->
+                <div class="system-selector labeled-control flex flex-col gap-2 xl:col-span-1 w-full p-2">
+                    <label for="ratio-system-select" class="text-[1.125rem] font-bold text-[#c7d2fe]">
+                        Overtone System
+                    </label>
+                    <select id="ratio-system-select" class="control-select">
+                        <!-- Options will be populated by JavaScript -->
+                    </select>
                     <div id="system-description" class="system-description text-sm text-gray-400 py-2"></div>
-
-                    <div
-                        class="subharmonic-toggle-container flex items-center justify-start gap-4 pt-2 border-t border-[#4b5563]">
-                        <span class="toggle-label overtone">Overtone (Multiply)</span>
-                        <div id="subharmonic-toggle" class="toggle" role="switch" aria-checked="false"></div>
-                        <span id="subharmonic-label" class="toggle-label inactive">Subharmonic (Divide)</span>
+                    <!-- Overtone controls for md/lg screens -->
+                    <div class="flex flex-col gap-2 md:mt-4">
+                        <div
+                            class="subharmonic-toggle-container flex items-center justify-start gap-4 pt-2 border-t border-[#4b5563]">
+                            <span class="toggle-label overtone">Overtone (Multiply)</span>
+                            <div id="subharmonic-toggle" class="toggle-switch" role="switch" aria-checked="false"
+                                aria-label="Subharmonic/Overtone control"></div>
+                            <span id="subharmonic-label" class="toggle-label inactive">Subharmonic (Divide)</span>
+                        </div>
                     </div>
                 </div>
-                <div class="control-row w-1/2 p-4 relative">
-                    <!-- Waveform Canvas and Controls -->
-                    <div class="waveform-container flex w-full flex-wrap">
-                        <!-- Linear waveform p5.js canvas will be injected here -->
-                        <div id="waveform-canvas-area" class="flex"></div>
-                        <div class="flex flex-col grow-1 shrink-0 justify-between pt-4 pb-4">
+
+                <!-- Waveform + controls -->
+                <div class="labeled-control">
+                    <label for="waveform-select">
+                        Sum
+                    </label>
+                    <div class="control-row xl:col-span-1 w-full relative flex-wrap">
+
+                        <div id="waveform-canvas-area" class="flex-1">
+                            <!-- P5 canvas injected here -->
+                        </div>
+                        <div class="flex flex-col items-stretch justify-center gap-4" style="min-width:120px;">
                             <button id="add-wave-button" class="btn btn-primary">Use Waveform</button>
                             <button id="export-wav-button" class="btn btn-secondary">Download</button>
                         </div>
+
                     </div>
                 </div>
             </div>
         </div>
-    </div>
-
-
-    <div class="bg-[#2b333e] rounded-lg">
-        <div id="drawbars" class="drawbar-container">
-            <!-- Drawbars will be generated by JavaScript -->
+        <div class="control-row">
+            <div class="labeled-control max-w-full">
+                <label for="drawbars">
+                    Drawbars
+                </label>
+                <div id="drawbars" class="drawbar-container">
+                    <!-- Drawbars will be generated by JavaScript -->
+                </div>
+                <div class="flex justify-center">
+                    <button id="reset-drawbars-button" class="red text-center p-4">Reset</button>
+                </div>
+            </div>
         </div>
     </div>
     </div>
+
+
+
+    <!-- Visualization Canvases -->
+    <div class="visualization-section">
+        <!-- Main Tonewheel Canvas -->
+        <div id="tonewheel-container" class="canvas-container">
+            <!-- Main tonewheel p5.js canvas will be injected here -->
+
+            <!-- Visualization Controls Overlay -->
+            <div class="controls-overlay">
+                <!-- Visualization Spread Control -->
+                <!-- <div class="labeled-control">
+                    <label for="spread-slider">
+                        Harmonic Spread
+                        <span id="spread-value">100%</span>
+                    </label>
+                    <input type="range" id="spread-slider" class="control-slider" min="0" max="1" step="0.01"
+                        value="1">
+                </div> -->
+
+                <!-- Visualization Frequency Control -->
+                <div class="labeled-control">
+                    <label for="viz-freq-slider">
+                        Animation Speed
+                        <span id="viz-freq-value">2.0 Hz</span>
+                    </label>
+                    <input type="range" id="viz-freq-slider" class="control-slider" min="0.1" max="10" step="0.1"
+                        value="2.0">
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Status Message Container -->
