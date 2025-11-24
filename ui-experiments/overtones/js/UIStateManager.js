@@ -1,11 +1,15 @@
 // UIStateManager.js
 // Centralizes state update logic for fundamental, drawbars, etc. Used by keyboard, MIDI, and UI modules.
 
-import { AppState, updateAppState, spectralSystems } from './config.js';
+import { AppState, updateAppState } from './config.js';
 import { updateFundamentalDisplay, updateKeyboardUI } from './ui.js';
 import { updateAudioProperties } from './audio.js';
 
 export class UIStateManager {
+    // Get current AppState
+    static getState() {
+        return AppState;
+    }
     // Set fundamental by MIDI note
     static setFundamentalByMidi(midiNote) {
         const midi = Math.min(127, midiNote); // Clamp upper bound

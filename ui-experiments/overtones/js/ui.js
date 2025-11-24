@@ -28,6 +28,10 @@ import {
 } from './utils.js';
 import { startTone, stopTone, updateAudioProperties, restartAudio, sampleCurrentWaveform, exportAsWAV, addToWaveforms } from './audio.js';
 import { setSpreadFactor } from './visualization.js';
+import { DrawbarControls } from './DrawbarControls.js';
+import { HelpDialog } from './HelpDialog.js';
+import { FundamentalControls } from './FundamentalControls.js';
+import { KeyboardShortcuts } from './KeyboardShortcuts.js';
 
 // ================================
 // INITIALIZATION
@@ -77,12 +81,7 @@ function setupRandomizeDrawbarsButton() {
     randomizeBtn.addEventListener('click', () => {
         const drawbars = document.querySelectorAll('#drawbars .drawbar-slider');
         drawbars.forEach((slider, idx) => {
-            // Fundamental (first drawbar) should be nonzero, others random
-            if (idx === 0) {
-                slider.value = Math.round(slider.max * (0.5 + Math.random() * 0.5)); // 50-100%
-            } else {
-                slider.value = Math.round(slider.max * Math.random()); // 0-100%
-            }
+            slider.value = slider.max * Math.random(); // 0-100%
             slider.dispatchEvent(new Event('input', { bubbles: true }));
         });
     });
@@ -218,23 +217,24 @@ function setupFundamentalControls() {
 
 function handleFundamentalChange(e) {
     let val = parseFloat(e.target.value);
-    if (!validateFrequency(val)) {
-        showStatus("Frequency must be between 10 Hz and 10000 Hz.", 'error');
+    // Allow very low frequencies (down to 0.01 Hz)
+    if (isNaN(val) || val < 0.01 || val > 10000) {
+        showStatus("Frequency must be between 0.01 Hz and 10000 Hz.", 'error');
         val = AppState.fundamentalFrequency; // Revert to current value
     }
-    
+
     updateAppState({ fundamentalFrequency: val });
     e.target.value = val.toFixed(2);
-    
+
     // Update MIDI note and keyboard selection
     const newMidiNote = Math.round(freqToMidi(val));
     const newOctave = Math.floor(newMidiNote / 12) - 1;
-    
-    updateAppState({ 
+
+    updateAppState({
         currentMidiNote: newMidiNote,
-        currentOctave: newOctave 
+        currentOctave: newOctave
     });
-    
+
     updateKeyboardUI();
     updateAudioProperties();
 }
@@ -246,22 +246,23 @@ function changeOctave(direction) {
 }
 
 function updateFundamental(newMidi) {
-    const clampedMidi = Math.max(0, Math.min(127, newMidi));
-    const frequency = midiToFreq(clampedMidi);
-    const octave = Math.floor(clampedMidi / 12) - 1;
-    
+    // Allow negative MIDI values for super low octaves
+    const midi = Math.round(newMidi);
+    const frequency = midiToFreq(midi);
+    const octave = Math.floor(midi / 12) - 1;
+
     updateAppState({
-        currentMidiNote: clampedMidi,
+        currentMidiNote: midi,
         fundamentalFrequency: frequency,
         currentOctave: octave
     });
-    
+
     updateFundamentalDisplay();
     updateKeyboardUI();
     updateAudioProperties();
 }
 
-function updateFundamentalDisplay() {
+export function updateFundamentalDisplay() {
     updateValue('fundamental-input', AppState.fundamentalFrequency.toFixed(2));
     updateText('current-octave-display', `Octave ${AppState.currentOctave}`);
 }
@@ -309,14 +310,15 @@ function handleKeyClick(noteIndex) {
     updateFundamental(newMidi);
 }
 
-function updateKeyboardUI() {
+export function updateKeyboardUI() {
     const keys = document.querySelectorAll('.key');
     keys.forEach(key => key.classList.remove('active'));
 
     // Calculate the index (0-11) of the selected note within the current octave
-    const noteIndex = AppState.currentMidiNote % 12;
+    let noteIndex = AppState.currentMidiNote % 12;
+    if (noteIndex < 0) noteIndex += 12;
     const selectedKey = document.querySelector(`.key[data-note-index="${noteIndex}"]`);
-    
+
     if (selectedKey) {
         selectedKey.classList.add('active');
     }
@@ -588,14 +590,12 @@ export function setupAccessibility() {
             handlePlayToggle();
         }
         
-        // Arrow keys for octave navigation
-        if (e.code === 'ArrowUp' && e.ctrlKey) {
-            e.preventDefault();
-            changeOctave(1);
-        }
-        if (e.code === 'ArrowDown' && e.ctrlKey) {
-            e.preventDefault();
-            changeOctave(-1);
-        }
     });
+
+        // Main UI event handlers (drawbars, fundamental, help)
+    document.getElementById('randomize-drawbars-button')?.addEventListener('click', DrawbarControls.randomizeDrawbars);
+    document.getElementById('reset-drawbars-button')?.addEventListener('click', DrawbarControls.resetDrawbars);
+    HelpDialog.init();
+    // Keyboard shortcuts
+    const kb = (new KeyboardShortcuts().init());
 }

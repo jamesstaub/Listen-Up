@@ -136,7 +136,7 @@
                     </div>
                 </div>
                 <div class="control-row grid grid-cols-1 lg:grid-cols-4 gap-4">
-                    
+
                     <!-- Drawbars -->
                     <div class="labeled-control max-w-full col-span-3">
                         <span>
@@ -157,21 +157,52 @@
                         <!-- Main tonewheel p5.js canvas will be injected here -->
                         <div class="controls-overlay">
                             <!-- Responsive Visualization Overlay Controls -->
-                            <div class="absolute top-2 right-2 z-10 bg-slate-900/70 rounded-xl p-2 shadow-lg flex flex-col gap-2 items-end w-auto max-w-xs md:max-w-sm">
+                            <div id="tonewheel-viz-controls"
+                                class="absolute top-2 right-2 md:top-4 md:right-4 z-10 bg-slate-900/70 rounded-xl p-2 md:p-3 shadow-lg flex flex-col gap-2 items-end w-auto max-w-xs md:max-w-sm opacity-0 pointer-events-none transition-opacity duration-500">
                                 <div class="flex items-center gap-2 w-full">
-                                    <label for="spread-slider" class="text-blue-300 text-xs md:text-sm font-medium mr-1">Spread</label>
+                                    <label for="spread-slider"
+                                        class="text-blue-300 text-xs md:text-sm font-medium mr-1">Spread</label>
                                     <input type="range" id="spread-slider" min="0" max="2" step="0.01" value="1"
                                         class="w-16 md:w-24 accent-blue-400 bg-transparent rounded h-1 mx-1">
-                                    <span id="spread-value" class="text-blue-400 text-xs md:text-sm font-normal min-w-[32px] md:min-w-[38px] max-w-[48px] md:max-w-[60px] truncate text-left overflow-hidden">100%</span>
+                                    <span id="spread-value"
+                                        class="text-blue-400 text-xs md:text-sm font-normal min-w-[32px] md:min-w-[38px] max-w-[48px] md:max-w-[60px] truncate text-left overflow-hidden">100%</span>
                                 </div>
                                 <div class="flex items-center gap-2 w-full">
-                                    <label for="viz-freq-slider" class="text-blue-300 text-xs md:text-sm font-medium mr-1">Speed</label>
+                                    <label for="viz-freq-slider"
+                                        class="text-blue-300 text-xs md:text-sm font-medium mr-1">Speed</label>
                                     <input type="range" id="viz-freq-slider" min="0.1" max="10" step="0.1" value="2.0"
                                         class="w-16 md:w-24 accent-blue-400 bg-transparent rounded h-1 mx-1">
-                                    <span id="viz-freq-value" class="text-blue-400 text-xs md:text-sm font-normal min-w-[32px] md:min-w-[38px] max-w-[48px] md:max-w-[60px] truncate text-left overflow-hidden">2.0 Hz</span>
+                                    <span id="viz-freq-value"
+                                        class="text-blue-400 text-xs md:text-sm font-normal min-w-[32px] md:min-w-[38px] max-w-[48px] md:max-w-[60px] truncate text-left overflow-hidden">2.0
+                                        Hz</span>
                                 </div>
                             </div>
                         </div>
+                        <script type="module">
+                            // Tonewheel overlay controls show/hide logic
+                            const tonewheelContainer = document.getElementById('tonewheel-container');
+                            const vizControls = document.getElementById('tonewheel-viz-controls');
+                            let fadeTimeout;
+                            function showVizControls() {
+                                vizControls.classList.remove('opacity-0', 'pointer-events-none');
+                                vizControls.classList.add('opacity-100', 'pointer-events-auto');
+                                clearTimeout(fadeTimeout);
+                                fadeTimeout = setTimeout(hideVizControls, 3000);
+                            }
+                            function hideVizControls() {
+                                vizControls.classList.remove('opacity-100', 'pointer-events-auto');
+                                vizControls.classList.add('opacity-0', 'pointer-events-none');
+                            }
+                            tonewheelContainer.addEventListener('mouseenter', showVizControls);
+                            tonewheelContainer.addEventListener('mousemove', showVizControls);
+                            tonewheelContainer.addEventListener('touchstart', showVizControls);
+                            vizControls.addEventListener('mouseenter', showVizControls);
+                            vizControls.addEventListener('mousemove', showVizControls);
+                            vizControls.addEventListener('touchstart', showVizControls);
+                            // Hide on mouseleave
+                            tonewheelContainer.addEventListener('mouseleave', hideVizControls);
+                            vizControls.addEventListener('mouseleave', hideVizControls);
+                        </script>
                     </div>
 
 

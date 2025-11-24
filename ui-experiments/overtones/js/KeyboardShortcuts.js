@@ -20,7 +20,8 @@ export class KeyboardShortcuts {
             const qwertyKeys = ['KeyA','KeyS','KeyD','KeyF','KeyG','KeyH','KeyJ','KeyK','KeyL','Semicolon','Quote','Backslash'];
             const qwertyIndex = qwertyKeys.indexOf(e.code);
             if (qwertyIndex !== -1) {
-                const baseMidi = (window.AppState.currentOctave + 1) * 12;
+                const state = UIStateManager.getState();
+                const baseMidi = ((state?.currentOctave ?? 3) + 1) * 12;
                 UIStateManager.setFundamentalByMidi(baseMidi + qwertyIndex);
                 return;
             }
