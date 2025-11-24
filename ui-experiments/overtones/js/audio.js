@@ -42,9 +42,10 @@
  */
 
 import { AppState, updateAppState, WAVETABLE_SIZE } from './config.js';
-import { calculateFrequency, generateFilenameParts, showStatus } from './utils.js';
+import { calculateFrequency, generateFilenameParts } from './utils.js';
 import { clearCustomWaveCache } from './visualization.js';
 import { AudioEngine, WavetableManager, WAVExporter } from './dsp/index.js';
+import { showStatus } from './domUtils.js';
 
 // ================================
 // DSP INSTANCES
@@ -191,7 +192,7 @@ async function startToneWithOscillators() {
                 const waveform = resolveWaveform(AppState.currentWaveform);
                 const frequencyCorrection = getFrequencyCorrection(AppState.currentWaveform);
                 const correctedFrequency = frequency * frequencyCorrection;
-                console.log(`Oscillator ${i}: base freq=${frequency}Hz, correction=${frequencyCorrection}, final=${correctedFrequency}Hz`);
+                
                 try {
                     const oscData = audioEngine.createOscillator(correctedFrequency, waveform, gain);
                     const oscKey = `harmonic_${i}`;

@@ -611,11 +611,19 @@ canvas {
 
 .drawbar-container {
     display: flex;
-    gap: 0.5rem;
-    padding: 10px 0;
+    padding: 10px 0 10px 1.5rem; /* extra left padding for scroll */
     overflow-x: auto;
     max-width: 100%;
-    justify-content: center;
+    justify-content: left;
+    scroll-padding-left: 1.5rem;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+}
+
+/* Hide native scrollbar for drawbar container */
+.drawbar-container::-webkit-scrollbar {
+    height: 0px;
+    background: transparent;
 }
 
 .drawbar {
@@ -790,7 +798,15 @@ canvas {
 
     .drawbar-container {
         justify-content: flex-start;
-        padding-left: 1rem;
+        padding-left: 1.5rem;
+        scroll-padding-left: 1.5rem;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+    }
+    .drawbar-container::-webkit-scrollbar {
+        height: 0px;
+        background: transparent;
+    }
     }
     
     .control-row {

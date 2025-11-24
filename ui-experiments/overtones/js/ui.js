@@ -7,14 +7,9 @@ import {
     AppState, 
     updateAppState, 
     spectralSystems, 
-    DRAWBAR_STYLES,
 } from './config.js';
 import { 
     midiToFreq, 
-    setupEventListener,
-    updateText,
-    updateValue,
-    showStatus,
     smoothUpdateMasterGain,
     smoothUpdateSystem,
     smoothUpdateSubharmonicMode
@@ -25,6 +20,7 @@ import { DrawbarControls, setupDrawbars, updateDrawbarLabels } from './DrawbarCo
 import { HelpDialog } from './HelpDialog.js';
 
 import { KeyboardShortcuts } from './KeyboardShortcuts.js';
+import { setupEventListener, showStatus, updateText, updateValue } from './domUtils.js';
 
 // ================================
 // INITIALIZATION
@@ -49,10 +45,7 @@ export function initUI() {
     }    
 
     drawbarUI = new DrawbarControls('drawbars');
-    // Render drawbars immediately on load
-    if (drawbarUI && typeof drawbarUI.render === 'function') {
-        drawbarUI.render();
-    }
+
 
     // Set initial UI values
     updateFundamentalDisplay();

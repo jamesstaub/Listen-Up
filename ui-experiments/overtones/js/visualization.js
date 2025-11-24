@@ -10,13 +10,13 @@ import {
     CANVAS_HEIGHT_RATIOS,
     HARMONIC_COLORS
 } from './config.js';
-import { showStatus } from './utils.js';
+
 
 let spreadFactor = 1;
 let baseRadius;
 let maxAmplitudeRadial;
 const baseRadiusRatio = 0.08; // Smaller fundamental, more spread
-const VISUALIZER_AMPLITUDE_SCALE = 16;
+
 
 // ================================
 // P5.JS SKETCH CONFIGURATION
