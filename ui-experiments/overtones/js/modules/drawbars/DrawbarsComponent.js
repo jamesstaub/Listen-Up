@@ -3,7 +3,7 @@ import { UIStateManager } from "../../UIStateManager.js";
 import { smoothUpdateHarmonicAmplitude } from "../../utils.js";
 
 // components/Drawbars.js
-export class Drawbars {
+export class DrawbarsComponent {
     constructor(containerId) {
         this.container = document.getElementById(containerId);
         this.sliders = [];

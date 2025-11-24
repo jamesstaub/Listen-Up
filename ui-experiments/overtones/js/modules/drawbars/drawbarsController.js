@@ -1,15 +1,11 @@
 
 // controller/DrawbarController.js
-import { Drawbars } from "./Drawbars.js";
-
-import { AppState } from "../../config.js";
+import { DrawbarsComponent } from "./DrawbarsComponent.js";
 import { DrawbarsActions } from "./drawbarsActions.js";
-
-
 
 export class DrawbarsController {
     constructor() {
-        this.component = new Drawbars("drawbars");
+        this.component = new DrawbarsComponent("drawbars");
     }
 
     init() {
@@ -26,14 +22,15 @@ export class DrawbarsController {
     setupDrawbarEvents() {
 
         // Whenever a spectral system loads, rebuild the drawbars
-        document.addEventListener("system-loaded", () => {
-            drawbars.render();
-        });
+        // document.addEventListener("system-loaded", () => {
+        //     drawbars.render();
+        // });
 
         // Whenever drawbar values change, update sliders
-        document.addEventListener("drawbar-change", () => {
-            drawbars.update();
-        });
+        // TODO: do we need this?
+        // document.addEventListener("drawbar-change", () => {
+        //     drawbars.update();
+        // });
 
         document.addEventListener("drawbars-randomized", () => this.update());
         document.addEventListener("drawbars-reset", () => this.update());

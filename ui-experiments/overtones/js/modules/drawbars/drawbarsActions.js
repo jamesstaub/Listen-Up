@@ -1,4 +1,6 @@
 import { AppState } from "../../config.js";
+import { UIStateManager } from "../../UIStateManager.js";
+import { smoothUpdateHarmonicAmplitude } from "../../utils.js";
 
 /**
  * ACTIONS MODULE
@@ -67,10 +69,8 @@ import { AppState } from "../../config.js";
 
 export const DrawbarsActions = {
     setDrawbar(index, value) {
-        AppState.harmonicAmplitudes[index] = value;
-
-        // used to be UIStateManager.setDrawbarGain()
-        AppState.drawbarGains[index] = value;
+        // AppState.harmonicAmplitudes[index] = value;
+        UIStateManager.setDrawbarGain(index, value);
 
         // Fire update event (replaces dispatchEvent in old DrawbarControls)
         document.dispatchEvent(
@@ -81,17 +81,19 @@ export const DrawbarsActions = {
     },
 
     randomize() {
-        AppState.harmonicAmplitudes = AppState.harmonicAmplitudes.map(
-            (_, i) => (i === 0 ? 0.5 + Math.random() * 0.5 : Math.random())
-        );
+        AppState.harmonicAmplitudes.forEach((_, i) => {
+            const value = i === 0 ? 0.5 + Math.random() * 0.5 : Math.random();
+            this.setDrawbar(i, value); // ensures audio updates
+        });
 
         document.dispatchEvent(new Event("drawbars-randomized"));
     },
 
     reset() {
-        AppState.harmonicAmplitudes = AppState.harmonicAmplitudes.map(
-            (_, i) => (i === 0 ? 1 : 0)
-        );
+        AppState.harmonicAmplitudes.forEach((_, i) => {
+            const value = i === 0 ? 1 : 0;
+            this.setDrawbar(i, value); // ensures audio updates
+        });
 
         document.dispatchEvent(new Event("drawbars-reset"));
     }

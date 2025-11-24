@@ -22,3 +22,6 @@
 
     - global record features
     - multichannel output
+
+- subharmonic
+- make sure it updates the waveform and viz
