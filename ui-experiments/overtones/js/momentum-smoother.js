@@ -1,140 +1,127 @@
 /**
- * MOMENTUM SMOOTHER MODULE
- * Continuous parameter smoothing without debouncing delays
- */
-
-/**
- * Momentum-based parameter smoother for immediate responsive control
- * without audible artifacts
+ * Momentum-based parameter smoother (Pro Version 2.0)
+ * Ultra-stable, MIDI-safe, high-performance smoothing engine.
  */
 class MomentumSmoother {
     constructor() {
-        this.smoothers = new Map();
+        this.params = new Map();
         this.isRunning = false;
-        this.animationFrame = null;
+        this.frame = null;
+
+        // stable timestep (60 fps equivalent)
+        this.dt = 1 / 60;
     }
 
     /**
-     * Creates or updates a parameter smoother
-     * @param {string} key - Unique parameter key
-     * @param {number} targetValue - Target value to smooth towards
-     * @param {Function} updateCallback - Function to call with smoothed value
-     * @param {number} smoothness - Smoothness factor (0.1 = fast, 0.9 = slow)
+     * Create/update a smoother target.
+     * IMPORTANT: callback is only set on creation — never overwritten.
      */
-    smoothTo(key, targetValue, updateCallback, smoothness = 0.85) {
-        if (!this.smoothers.has(key)) {
-            this.smoothers.set(key, {
-                current: targetValue,
-                target: targetValue,
-                callback: updateCallback,
-                smoothness: smoothness,
-                lastUpdate: performance.now()
-            });
+    smoothTo(key, value, callback, smoothness = 0.75) {
+        let p = this.params.get(key);
+
+        if (!p) {
+            // new parameter
+            p = {
+                current: value,
+                target: value,
+                pendingTarget: null,   // coalesces multiple updates
+                callback,
+                smoothness: Math.min(Math.max(smoothness, 0.01), 0.99999),
+                active: true
+            };
+            this.params.set(key, p);
         } else {
-            const smoother = this.smoothers.get(key);
-            smoother.target = targetValue;
-            smoother.callback = updateCallback;
-            smoother.smoothness = smoothness;
+            // existing param — do NOT replace callback
+            p.pendingTarget = value; // store incoming MIDI/slider events
+            p.smoothness = Math.min(Math.max(smoothness, 0.01), 0.99999);
+            p.active = true;
         }
 
-        this.startSmoothing();
+        if (!this.isRunning) this.start();
     }
 
     /**
-     * Starts the smoothing animation loop
+     * Immediate hard-set, bypassing smoothing.
      */
-    startSmoothing() {
+    setImmediate(key, value) {
+        const p = this.params.get(key);
+        if (!p) return;
+
+        p.current = value;
+        p.target = value;
+        p.pendingTarget = null;
+        p.active = false;
+
+        p.callback(value);
+    }
+
+    start() {
         if (this.isRunning) return;
-        
         this.isRunning = true;
         this.tick();
     }
 
-    /**
-     * Main smoothing loop
-     */
     tick() {
-        const now = performance.now();
-        let hasActiveSmoothing = false;
+        let activeCount = 0;
 
-        for (const [key, smoother] of this.smoothers) {
-            const deltaTime = (now - smoother.lastUpdate) / 16.67; // Normalize to 60fps
-            const diff = smoother.target - smoother.current;
-            
-            // Check if we need to continue smoothing
-            if (Math.abs(diff) > 0.0001) {
-                // Apply exponential smoothing with time compensation
-                const smoothingFactor = Math.pow(smoother.smoothness, deltaTime);
-                smoother.current = smoother.current * smoothingFactor + smoother.target * (1 - smoothingFactor);
-                
-                // Call the update callback
-                smoother.callback(smoother.current);
-                hasActiveSmoothing = true;
-            } else {
-                // Snap to target when very close
-                if (smoother.current !== smoother.target) {
-                    smoother.current = smoother.target;
-                    smoother.callback(smoother.current);
-                }
+        for (const [key, p] of this.params) {
+
+            // If multiple updates came in (e.g. MIDI flood), coalesce:
+            if (p.pendingTarget !== null) {
+                p.target = p.pendingTarget;
+                p.pendingTarget = null;
             }
-            
-            smoother.lastUpdate = now;
+
+            if (!p.active) continue;
+
+            const diff = p.target - p.current;
+
+            if (Math.abs(diff) < 1e-5) {
+                // Snap and stop smoothing
+                p.current = p.target;
+                p.callback(p.current);
+                p.active = false;
+                continue;
+            }
+
+            // PRO exponential smoothing (frame-rate independent):
+            // smoothness = 0.75 → soft smoothing
+            // smoothness = 0.98 → slow/creamy
+            const s = p.smoothness;
+            const smoothingFactor = Math.pow(s, this.dt * 60);
+
+            p.current = 
+                p.current * smoothingFactor +
+                p.target * (1 - smoothingFactor);
+
+            p.callback(p.current);
+            activeCount++;
         }
 
-        if (hasActiveSmoothing) {
-            this.animationFrame = requestAnimationFrame(() => this.tick());
+        if (activeCount > 0) {
+            this.frame = requestAnimationFrame(() => this.tick());
         } else {
             this.isRunning = false;
-            this.animationFrame = null;
+            this.frame = null;
         }
     }
 
-    /**
-     * Immediately sets a parameter value without smoothing
-     * @param {string} key - Parameter key
-     * @param {number} value - Value to set
-     */
-    setImmediate(key, value) {
-        if (this.smoothers.has(key)) {
-            const smoother = this.smoothers.get(key);
-            smoother.current = value;
-            smoother.target = value;
-            smoother.callback(value);
-        }
-    }
-
-    /**
-     * Removes a parameter from smoothing
-     * @param {string} key - Parameter key to remove
-     */
     remove(key) {
-        this.smoothers.delete(key);
+        this.params.delete(key);
     }
 
-    /**
-     * Clears all smoothers
-     */
     clear() {
-        this.smoothers.clear();
-        if (this.animationFrame) {
-            cancelAnimationFrame(this.animationFrame);
-        }
+        this.params.clear();
+        if (this.frame) cancelAnimationFrame(this.frame);
         this.isRunning = false;
+        this.frame = null;
     }
 
-    /**
-     * Gets the current value of a parameter
-     * @param {string} key - Parameter key
-     * @returns {number|null} Current value or null if not found
-     */
     getCurrentValue(key) {
-        const smoother = this.smoothers.get(key);
-        return smoother ? smoother.current : null;
+        const p = this.params.get(key);
+        return p ? p.current : null;
     }
 }
 
-// Create and export a global instance
 export const momentumSmoother = new MomentumSmoother();
-
-// Also export the class for potential future use
 export { MomentumSmoother };

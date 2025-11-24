@@ -1,7 +1,7 @@
 import { updateAudioProperties } from "../../audio.js";
 import { AppState, updateAppState } from "../../config.js";
 import { UIStateManager } from "../../UIStateManager.js";
-import { smoothUpdateHarmonicAmplitude } from "../../utils.js";
+import { momentumSmoother, smoothUpdateHarmonicAmplitude } from "../../utils.js";
 
 /**
  * ACTIONS MODULE
@@ -76,6 +76,7 @@ export const DrawbarsActions = {
             updateAppState({ harmonicAmplitudes: amps });
         }
 
+        // Always update audio immediately
         smoothUpdateHarmonicAmplitude(index, value);
 
         // Fire update event (replaces dispatchEvent in old DrawbarControls)
@@ -96,12 +97,15 @@ export const DrawbarsActions = {
     },
 
     reset() {
-        AppState.harmonicAmplitudes.forEach((_, i) => {
-            const value = i === 0 ? 1 : 0;
-            this.setDrawbar(i, value); // ensures audio updates
+        const oldAmps = AppState.harmonicAmplitudes || [];
+        const newAmps = oldAmps.map((_, i) => (i === 0 ? 1 : 0));
+
+        updateAppState({ harmonicAmplitudes: newAmps });
+
+        newAmps.forEach((v, i) => {
+            smoothUpdateHarmonicAmplitude(i, v, true);
         });
 
         document.dispatchEvent(new Event("drawbars-reset"));
-    },
-
+    }
 };

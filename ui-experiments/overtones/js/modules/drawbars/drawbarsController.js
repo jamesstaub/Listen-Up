@@ -1,6 +1,5 @@
 
 // controller/DrawbarController.js
-import { smoothUpdateHarmonicAmplitude } from "../../utils.js";
 import { DrawbarsComponent } from "./DrawbarsComponent.js";
 import { DrawbarsActions } from "./drawbarsActions.js";
 
@@ -11,11 +10,9 @@ export class DrawbarsController {
 
     init() {
         this.component.render();
-
         // connect component → actions
         this.component.onChange = (i, val) => {
             DrawbarsActions.setDrawbar(i, val);
-            smoothUpdateHarmonicAmplitude(i, val);
         }
 
         this.setupDrawbarEvents();
@@ -25,13 +22,7 @@ export class DrawbarsController {
 
     setupDrawbarEvents() {
 
-        // Whenever a spectral system loads, rebuild the drawbars
-        // document.addEventListener("system-loaded", () => {
-        //     drawbars.render();
-        // });
-
         // Whenever drawbar values change, update sliders
-        // TODO: do we need this?
         // document.addEventListener("drawbar-change", () => {
         //     drawbars.update();
         // });

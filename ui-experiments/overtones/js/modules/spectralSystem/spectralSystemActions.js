@@ -1,8 +1,4 @@
-// spectralSystemActions.js
-// Pure state mutation and event dispatch for spectral system changes
-
 import { AppState, spectralSystems, updateAppState } from '../../config.js';
-import { UIStateManager } from '../../UIStateManager.js';
 
 export const SpectralSystemActions = {
     setSystem(index) {

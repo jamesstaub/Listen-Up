@@ -18,16 +18,14 @@ export class DrawbarsComponent {
         this.container.innerHTML = '';
         const numPartials = AppState.currentSystem.ratios.length;
 
-        // Resize harmonicAmplitudes to match current system, preserving values where possible
-        const oldAmps = AppState.harmonicAmplitudes || [];
-        const newAmps = [];
-        for (let i = 0; i < numPartials; i++) {
-            newAmps[i] = typeof oldAmps[i] === 'number' ? oldAmps[i] : (i === 0 ? 1.0 : 0.0);
+        // Ensure AppState.harmonicAmplitudes is the correct length
+        if (!Array.isArray(AppState.harmonicAmplitudes) || AppState.harmonicAmplitudes.length !== numPartials) {
+            AppState.harmonicAmplitudes = Array(numPartials).fill(0);
+            AppState.harmonicAmplitudes[0] = 1.0;
         }
-        AppState.harmonicAmplitudes = newAmps;
 
         for (let i = 0; i < numPartials; i++) {
-            const drawbarDiv = this.createDrawbar(i, newAmps[i]);
+            const drawbarDiv = this.createDrawbar(i, AppState.harmonicAmplitudes[i]);
             this.container.appendChild(drawbarDiv);
         }
     }
@@ -83,14 +81,14 @@ export class DrawbarsComponent {
     }
 
     handleDrawbarChange(e) {
-        const index = parseInt(e.target.dataset.index);
-        const value = parseFloat(e.target.value);
+    const index = parseInt(e.target.dataset.index);
+    const value = parseFloat(e.target.value);
 
-        // Notify the controller/app via callback
-        this.onChange?.(index, value);
+    // Notify the controller/app via callback
+    this.onChange?.(index, value);
 
-        // Optionally update ARIA attribute
-        e.target.setAttribute('aria-valuenow', value);
+    // Optionally update ARIA attribute
+    e.target.setAttribute('aria-valuenow', value);
     }
 
     setValue(index, value) {

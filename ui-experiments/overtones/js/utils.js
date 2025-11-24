@@ -98,8 +98,6 @@ export function calculateFrequency(ratio) {
     }
 }
 
-
-
 // ================================
 // VALIDATION UTILITIES
 // ================================
@@ -145,27 +143,32 @@ export function mapRange(value, start1, stop1, start2, stop2) {
 
 // Re-export for convenience
 export { momentumSmoother } from './momentum-smoother.js';
+import { updateAudioProperties } from './audio.js';
 
 /**
  * Smooth harmonic amplitude update with momentum (immediate response, no debouncing)
  * @param {number} index - Harmonic index
  * @param {number} value - New amplitude value
  */
-export function smoothUpdateHarmonicAmplitude(index, value) {
+export function smoothUpdateHarmonicAmplitude(index, value, immediate = false) {
     const key = `harmonic_${index}`;
-    
+
+    if (immediate) {
+        momentumSmoother.setImmediate(key, value);
+        AppState.harmonicAmplitudes[index] = value;
+        updateAudioProperties();
+        return;
+    }
+
+    // Normal smoothing path
     momentumSmoother.smoothTo(
         key,
         value,
-        async (smoothedValue) => {
-            // Update state immediately
+        (smoothedValue) => {
             AppState.harmonicAmplitudes[index] = smoothedValue;
-            
-            // Update audio properties immediately (no debouncing delay)
-            const { updateAudioProperties } = await import('./audio.js');
             updateAudioProperties();
         },
-        0.75 // Higher smoothness for harmonic amplitudes (less aggressive smoothing)
+        0.8
     );
 }
 
