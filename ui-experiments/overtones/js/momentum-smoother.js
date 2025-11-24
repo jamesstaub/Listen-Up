@@ -13,6 +13,29 @@ class MomentumSmoother {
     }
 
     /**
+     * Debounce utility for handling rapid-fire external events (e.g. MIDI)
+     * @param {string} key - Unique debounce key
+     * @param {number} delay - Time in ms to wait after last call
+     * @param {Function} fn - Function to invoke when stable
+     */
+    debounce(key, delay, fn) {
+        if (!this._debouncers) this._debouncers = new Map();
+
+        // Clear an existing timer
+        if (this._debouncers.has(key)) {
+            clearTimeout(this._debouncers.get(key));
+        }
+
+        // Set a new one
+        const t = setTimeout(() => {
+            this._debouncers.delete(key);
+            fn();
+        }, delay);
+
+        this._debouncers.set(key, t);
+    }
+
+    /**
      * Create/update a smoother target.
      * IMPORTANT: callback is only set on creation — never overwritten.
      */
@@ -90,7 +113,7 @@ class MomentumSmoother {
             const s = p.smoothness;
             const smoothingFactor = Math.pow(s, this.dt * 60);
 
-            p.current = 
+            p.current =
                 p.current * smoothingFactor +
                 p.target * (1 - smoothingFactor);
 

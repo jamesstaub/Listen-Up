@@ -1,13 +1,16 @@
-// SpectralSystemComponent.js
-// Handles rendering of the spectral system selector and description
+import BaseComponent from "../base/BaseComponent.js";
 
-export class SpectralSystemComponent {
+export class SpectralSystemComponent extends BaseComponent {
     constructor(selectEl, descriptionEl) {
+        super();
         this.selectEl = selectEl;
         this.descriptionEl = descriptionEl;
+        this.onChange = null;
     }
 
-    render(systems, currentSystem) {
+    render({ systems, currentSystem }) {
+        if (!this.selectEl) return;
+
         // Populate selector
         this.selectEl.innerHTML = '';
         systems.forEach((system, index) => {
@@ -17,19 +20,11 @@ export class SpectralSystemComponent {
             if (system === currentSystem) option.selected = true;
             this.selectEl.appendChild(option);
         });
+
         // Update description
-        this.descriptionEl.innerHTML = currentSystem?.description || '';
+        this.updateContent(this.descriptionEl, currentSystem?.description || '', { asHTML: true });
 
-
-        this.selectEl.addEventListener('change', this.handleSystemChange.bind(this));
-    }
-
-    handleSystemChange(e) {
-        const systemIndex = parseInt(e.target.value);
-
-        this.onChange?.(systemIndex);
-
-        // update aria attribute
-        e.target.setAttribute('aria-valuenow', systemIndex);
+        // Bind change event
+        this.bindChange(this.selectEl, (val) => this.onChange(val));
     }
 }

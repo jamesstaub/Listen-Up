@@ -1,38 +1,43 @@
+import { BaseController } from '../base/BaseController.js';
 import { SpectralSystemActions } from './spectralSystemActions.js';
 import { SpectralSystemComponent } from './SpectralSystemComponent.js';
 import { AppState, spectralSystems } from '../../config.js';
-import { smoothUpdateSystem } from '../../utils.js';
 
-export class SpectralSystemController {
-    constructor() {
-        this.selectEl = document.getElementById('ratio-system-select');
-        this.descriptionEl = document.getElementById('system-description');
-        this.component = new SpectralSystemComponent(this.selectEl, this.descriptionEl);
+export class SpectralSystemController extends BaseController {
+    /**
+     * Build and return the component instance
+     */
+    createComponent() {
+        const selectEl = document.getElementById('ratio-system-select');
+        const descriptionEl = document.getElementById('system-description');
+        return new SpectralSystemComponent(selectEl, descriptionEl);
     }
 
-    init() {
-        this.component.render(spectralSystems, AppState.currentSystem);
-        
+    /**
+     * Provide props for rendering
+     */
+    getProps() {
+        return {
+            systems: spectralSystems,
+            currentSystem: AppState.currentSystem
+        };
+    }
+
+    /**
+     * Handle events coming from the component itself
+     */
+    bindComponentEvents() {
         this.component.onChange = (systemIndex) => {
             SpectralSystemActions.setSystem(systemIndex);
-            smoothUpdateSystem(systemIndex);
-        }
-
-        this.selectEl.addEventListener('change', (e) => {
-            const index = parseInt(e.target.value);
-            SpectralSystemActions.setSystem(index);
-        });
-        document.addEventListener('spectral-system-changed', (e) => {
-            this.component.render(spectralSystems, AppState.currentSystem);
-        });
+        };
     }
 
-    // For external use: update description only
-    updateDescription() {
-        this.descriptionEl.innerHTML = AppState.currentSystem?.description || '';
+    /**
+     * Listen to external/global events
+     */
+    bindExternalEvents() {
+        document.addEventListener('spectral-system-changed', () => {
+            this.update();
+        });
     }
-
-    
 }
-
-

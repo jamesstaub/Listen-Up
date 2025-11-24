@@ -1,4 +1,5 @@
 import { AppState, spectralSystems, updateAppState } from '../../config.js';
+import { smoothUpdateSystem } from '../../utils.js';
 
 export const SpectralSystemActions = {
     setSystem(index) {
@@ -15,6 +16,9 @@ export const SpectralSystemActions = {
             newAmps[i] = (i === 0 ? 1.0 : 0.0);
         }
         AppState.harmonicAmplitudes = newAmps;
+
+        smoothUpdateSystem(index);
+
         document.dispatchEvent(new CustomEvent('spectral-system-changed', {
             detail: { index, system: AppState.currentSystem }
         }));

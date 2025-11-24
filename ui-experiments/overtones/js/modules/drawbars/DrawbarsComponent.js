@@ -1,9 +1,9 @@
 import { AppState, DRAWBAR_STYLES } from "../../config.js";
+import BaseComponent from "../base/BaseComponent.js";
 
-
-// components/Drawbars.js
-export class DrawbarsComponent {
+export class DrawbarsComponent extends BaseComponent {
     constructor(containerId) {
+        super();
         this.container = document.getElementById(containerId);
         this.sliders = [];
     }
@@ -18,7 +18,6 @@ export class DrawbarsComponent {
         this.container.innerHTML = '';
         const numPartials = AppState.currentSystem.ratios.length;
 
-        // Ensure AppState.harmonicAmplitudes is the correct length
         if (!Array.isArray(AppState.harmonicAmplitudes) || AppState.harmonicAmplitudes.length !== numPartials) {
             AppState.harmonicAmplitudes = Array(numPartials).fill(0);
             AppState.harmonicAmplitudes[0] = 1.0;
@@ -27,19 +26,16 @@ export class DrawbarsComponent {
         for (let i = 0; i < numPartials; i++) {
             const drawbarDiv = this.createDrawbar(i, AppState.harmonicAmplitudes[i]);
             this.container.appendChild(drawbarDiv);
+            this.sliders.push(drawbarDiv.querySelector('input'));
         }
     }
 
     updateDrawbarLabels() {
         AppState.currentSystem.labels.forEach((label, index) => {
-            const labelElement = document.getElementById(`drawbar-label-${index}`);
-            if (labelElement) {
-                labelElement.textContent = label;
-            }
+            const labelEl = document.getElementById(`drawbar-label-${index}`);
+            this.updateContent(labelEl, label);
         });
     }
-
-
 
     createDrawbar(index, value) {
         const styleClass = DRAWBAR_STYLES[index] || 'white';
@@ -51,8 +47,7 @@ export class DrawbarsComponent {
         const labelSpan = document.createElement('span');
         labelSpan.className = 'drawbar-label';
         labelSpan.id = `drawbar-label-${index}`;
-        // Use system label for this partial
-        labelSpan.textContent = AppState.currentSystem.labels[index] || '';
+        this.updateContent(labelSpan, AppState.currentSystem.labels[index] || '');
 
         const inputWrapper = document.createElement('div');
         inputWrapper.className = 'drawbar-input-wrapper';
@@ -66,11 +61,10 @@ export class DrawbarsComponent {
         input.min = '0';
         input.max = '1';
         input.step = '0.01';
-        input.value = initialValue;
-        input.dataset.index = index;
         input.value = value;
+        input.dataset.index = index;
 
-        input.addEventListener('input', this.handleDrawbarChange.bind(this));
+        this.bindEvent(input, 'input', this.handleDrawbarChange);
 
         inputWrapper.appendChild(trackDiv);
         inputWrapper.appendChild(input);
@@ -81,17 +75,13 @@ export class DrawbarsComponent {
     }
 
     handleDrawbarChange(e) {
-    const index = parseInt(e.target.dataset.index);
-    const value = parseFloat(e.target.value);
-
-    // Notify the controller/app via callback
-    this.onChange?.(index, value);
-
-    // Optionally update ARIA attribute
-    e.target.setAttribute('aria-valuenow', value);
+        const index = parseInt(e.target.dataset.index);
+        const value = parseFloat(e.target.value);
+        this.onChange?.(index, value);
+        e.target.setAttribute('aria-valuenow', value);
     }
 
     setValue(index, value) {
-        this.sliders[index].value = value;
+        if (this.sliders[index]) this.sliders[index].value = value;
     }
 }

@@ -195,30 +195,33 @@ export function smoothUpdateMasterGain(value) {
  * @param {Function} onComplete - Optional callback when update completes
  */
 
-// TODO this should be moved to actions?
+
+let pendingSystemIndex = null;
 export function smoothUpdateSystem(systemIndex, onComplete = null) {
-    // For system changes, we can apply immediately since they don't need continuous smoothing
-    // The audio parameter changes will be smoothed by updateAudioProperties
-    const applySystemChange = async () => {
-        const { setCurrentSystem } = await import('./config.js');
-        const { updateAudioProperties } = await import('./audio.js');
-        
-        // Update system
-        setCurrentSystem(systemIndex);
-        
-        // If playing, smoothly update frequencies
+    pendingSystemIndex = systemIndex;
+
+    // Use a dedicated channel for system changes
+    momentumSmoother.debounce("systemChange", 35, async () => {
+
+        const idx = pendingSystemIndex; // final chosen system
+        if (idx === null) return;
+
+        const { setCurrentSystem } = await import("./config.js");
+        const { updateAudioProperties } = await import("./audio.js");
+
+        // Switch the tuning system instantly
+        setCurrentSystem(idx);
+
+        // Apply smoothed audio transition if playing
         if (AppState.isPlaying) {
             updateAudioProperties();
         }
-        
-        // Call completion callback if provided
-        if (onComplete) {
-            onComplete();
-        }
-    };
-    
-    // Small delay to prevent too rapid system switching
-    setTimeout(applySystemChange, 50);
+
+        // Notify UI or callbacks
+        if (onComplete) onComplete();
+
+        pendingSystemIndex = null;
+    });
 }
 
 /**

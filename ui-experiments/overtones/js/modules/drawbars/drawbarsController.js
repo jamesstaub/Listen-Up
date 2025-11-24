@@ -15,12 +15,11 @@ export class DrawbarsController {
             DrawbarsActions.setDrawbar(i, val);
         }
 
-        this.setupDrawbarEvents();
+        this.setupEvents();
     }
-    
 
 
-    setupDrawbarEvents() {
+    setupEvents() {
 
         // Whenever drawbar values change, update sliders
         // document.addEventListener("drawbar-change", () => {
@@ -29,6 +28,11 @@ export class DrawbarsController {
 
         document.addEventListener("drawbars-randomized", () => this.update());
         document.addEventListener("drawbars-reset", () => this.update());
+
+        // Update labels when spectral system changes
+        document.addEventListener("spectral-system-changed", () => {
+            this.update();
+        });
     }
 
     randomize() {

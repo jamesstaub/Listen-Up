@@ -79,7 +79,6 @@ export const DrawbarsActions = {
         // Always update audio immediately
         smoothUpdateHarmonicAmplitude(index, value);
 
-        // Fire update event (replaces dispatchEvent in old DrawbarControls)
         document.dispatchEvent(
             new CustomEvent("drawbar-change", {
                 detail: { index, value }
