@@ -1,6 +1,5 @@
 import { AppState, DRAWBAR_STYLES } from "../../config.js";
-import { UIStateManager } from "../../UIStateManager.js";
-import { smoothUpdateHarmonicAmplitude } from "../../utils.js";
+
 
 // components/Drawbars.js
 export class DrawbarsComponent {
@@ -73,7 +72,7 @@ export class DrawbarsComponent {
         input.dataset.index = index;
         input.value = value;
 
-        input.addEventListener('input', this.handleDrawbarChange);
+        input.addEventListener('input', this.handleDrawbarChange.bind(this));
 
         inputWrapper.appendChild(trackDiv);
         inputWrapper.appendChild(input);
@@ -86,14 +85,13 @@ export class DrawbarsComponent {
     handleDrawbarChange(e) {
         const index = parseInt(e.target.dataset.index);
         const value = parseFloat(e.target.value);
-        AppState.harmonicAmplitudes[index] = value;
+
+        // Notify the controller/app via callback
+        this.onChange?.(index, value);
+
+        // Optionally update ARIA attribute
         e.target.setAttribute('aria-valuenow', value);
-
-        // Smooth audio update
-        smoothUpdateHarmonicAmplitude(index, value);
-        UIStateManager.setDrawbarGain(index, value);
     }
-
 
     setValue(index, value) {
         this.sliders[index].value = value;

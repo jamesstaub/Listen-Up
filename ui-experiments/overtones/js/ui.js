@@ -11,7 +11,6 @@ import {
 import {
     midiToFreq,
     smoothUpdateMasterGain,
-    smoothUpdateSystem,
     smoothUpdateSubharmonicMode
 } from './utils.js';
 import { startTone, stopTone, updateAudioProperties, restartAudio, sampleCurrentWaveform, exportAsWAV, addToWaveforms } from './audio.js';
@@ -23,6 +22,7 @@ import { KeyboardShortcuts } from './KeyboardShortcuts.js';
 import { setupEventListener, showStatus, updateText, updateValue } from './domUtils.js';
 
 import { DrawbarsController } from './modules/drawbars/drawbarsController.js';
+import { SpectralSystemController } from './modules/spectralSystem/spectralSystemController.js';
 
 // ================================
 // INITIALIZATION
@@ -30,6 +30,7 @@ import { DrawbarsController } from './modules/drawbars/drawbarsController.js';
 
 
 let drawbarsController
+let spectralSystemController
 /**
  * Initializes all UI components and event handlers
  */
@@ -38,25 +39,26 @@ export function initUI() {
     setupControlSliders();
     setupFundamentalControls();
     setupKeyboard();
-    setupSystemSelector();
     setupSubharmonicToggle();
     setupWaveformSelector();
-
+    
     // Ensure currentSystem is set before rendering drawbars
     if (!AppState.currentSystem) {
         AppState.currentSystem = spectralSystems[0];
     }
-
-
+    
+    
     setupDrawbars()
+    setupSpectralSystem()
+    // setupSystemSelector();
+    // populateSystemSelector();
+    // updateSystemDescription();
 
 
     // Set initial UI values
     updateFundamentalDisplay();
     updateKeyboardUI();
-    populateSystemSelector();
 
-    updateSystemDescription();
 
     // Initialize help and keyboard shortcuts
     HelpDialog.init();
@@ -74,6 +76,11 @@ function setupDrawbars() {
     document.getElementById("randomize-drawbars-button")?.addEventListener("click", () => {
         drawbarsController.randomize();
     });
+}
+
+function setupSpectralSystem() {
+    spectralSystemController = new SpectralSystemController();
+    spectralSystemController.init();
 }
 
 // ================================
@@ -311,60 +318,22 @@ export function updateKeyboardUI() {
 // SYSTEM SELECTOR
 // ================================
 
-function setupSystemSelector() {
-    const select = document.getElementById('ratio-system-select');
-    if (select) {
-        select.addEventListener('change', handleSystemChange);
-    }
-}
 
-function populateSystemSelector() {
-    const select = document.getElementById('ratio-system-select');
-    if (!select) return;
+// function populateSystemSelector() {
+//     const select = document.getElementById('ratio-system-select');
+//     if (!select) return;
 
-    select.innerHTML = ''; // Clear existing options
+//     select.innerHTML = ''; // Clear existing options
 
-    spectralSystems.forEach((system, index) => {
-        const option = document.createElement('option');
-        option.textContent = system.name;
-        option.value = index;
-        select.appendChild(option);
-    });
-}
-
-function handleSystemChange(e) {
-    const systemIndex = parseInt(e.target.value);
-
-    // Use smooth system update with UI update callback
-    smoothUpdateSystem(systemIndex, () => {
-        // Resize amplitudes to match new system
-        const numPartials = spectralSystems[systemIndex].ratios.length;
-        const oldAmps = AppState.harmonicAmplitudes || [];
-        const newAmps = [];
-        for (let i = 0; i < numPartials; i++) {
-            if (typeof oldAmps[i] === 'number') {
-                newAmps[i] = oldAmps[i];
-            } else {
-                newAmps[i] = (i === 0 ? 1.0 : 0.0);
-            }
-        }
-        // If switching to a system with more partials, initialize new drawbars to 0
-        for (let i = oldAmps.length; i < numPartials; i++) {
-            newAmps[i] = (i === 0 ? 1.0 : 0.0);
-        }
-        AppState.harmonicAmplitudes = newAmps;
-
-        // Redraw drawbars and update all UI
-        drawbarsController.init();
+//     spectralSystems.forEach((system, index) => {
+//         const option = document.createElement('option');
+//         option.textContent = system.name;
+//         option.value = index;
+//         select.appendChild(option);
+//     });
+// }
 
 
-        updateSystemDescription();
-        updateUI();
-        if (AppState.p5Instance && typeof AppState.p5Instance.redraw === 'function') {
-            AppState.p5Instance.redraw();
-        }
-    });
-}
 
 function updateSystemDescription() {
     updateText('system-description', AppState.currentSystem.description, true);

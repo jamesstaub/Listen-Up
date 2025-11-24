@@ -1,5 +1,6 @@
 
 // controller/DrawbarController.js
+import { smoothUpdateHarmonicAmplitude } from "../../utils.js";
 import { DrawbarsComponent } from "./DrawbarsComponent.js";
 import { DrawbarsActions } from "./drawbarsActions.js";
 
@@ -12,11 +13,14 @@ export class DrawbarsController {
         this.component.render();
 
         // connect component → actions
-        this.component.onChange = (i, val) =>
+        this.component.onChange = (i, val) => {
             DrawbarsActions.setDrawbar(i, val);
+            smoothUpdateHarmonicAmplitude(i, val);
+        }
 
         this.setupDrawbarEvents();
     }
+    
 
 
     setupDrawbarEvents() {

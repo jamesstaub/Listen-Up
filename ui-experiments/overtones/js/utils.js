@@ -191,6 +191,8 @@ export function smoothUpdateMasterGain(value) {
  * @param {number} systemIndex - Index of new system
  * @param {Function} onComplete - Optional callback when update completes
  */
+
+// TODO this should be moved to actions?
 export function smoothUpdateSystem(systemIndex, onComplete = null) {
     // For system changes, we can apply immediately since they don't need continuous smoothing
     // The audio parameter changes will be smoothed by updateAudioProperties

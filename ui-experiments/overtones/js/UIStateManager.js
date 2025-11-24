@@ -5,6 +5,12 @@ import { AppState, updateAppState } from './config.js';
 import { updateFundamentalDisplay, updateKeyboardUI } from './ui.js';
 import { updateAudioProperties } from './audio.js';
 
+
+/**
+ * DEPRECATED:
+ * use actions in modules diretories and call updateAppState directly from them
+ */
+
 export class UIStateManager {
     // Get current AppState
     static getState() {
@@ -31,15 +37,7 @@ export class UIStateManager {
         UIStateManager.setFundamentalByMidi(midi);
     }
 
-    // Set drawbar gain by index
-    static setDrawbarGain(index, value) {
-        const amps = AppState.harmonicAmplitudes;
-        if (amps && amps.length > index) {
-            amps[index] = value;
-            updateAppState({ harmonicAmplitudes: amps });
-            updateAudioProperties();
-        }
-    }
+
 
     // Utility: MIDI <-> Frequency
     static midiToFreq(midi) {

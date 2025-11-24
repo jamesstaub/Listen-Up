@@ -1,4 +1,5 @@
-import { AppState } from "../../config.js";
+import { updateAudioProperties } from "../../audio.js";
+import { AppState, updateAppState } from "../../config.js";
 import { UIStateManager } from "../../UIStateManager.js";
 import { smoothUpdateHarmonicAmplitude } from "../../utils.js";
 
@@ -69,8 +70,13 @@ import { smoothUpdateHarmonicAmplitude } from "../../utils.js";
 
 export const DrawbarsActions = {
     setDrawbar(index, value) {
-        // AppState.harmonicAmplitudes[index] = value;
-        UIStateManager.setDrawbarGain(index, value);
+        const amps = AppState.harmonicAmplitudes;
+        if (amps && amps.length > index) {
+            amps[index] = value;
+            updateAppState({ harmonicAmplitudes: amps });
+        }
+
+        smoothUpdateHarmonicAmplitude(index, value);
 
         // Fire update event (replaces dispatchEvent in old DrawbarControls)
         document.dispatchEvent(
@@ -96,5 +102,6 @@ export const DrawbarsActions = {
         });
 
         document.dispatchEvent(new Event("drawbars-reset"));
-    }
+    },
+
 };
