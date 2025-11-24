@@ -7,36 +7,30 @@ import {
     AppState, 
     updateAppState, 
     spectralSystems, 
-    setCurrentSystem, 
-    setHarmonicAmplitude,
     DRAWBAR_STYLES,
-    MIDI_NOTE_NAMES
 } from './config.js';
 import { 
     midiToFreq, 
-    freqToMidi, 
-    midiToNoteName, 
-    validateFrequency,
     setupEventListener,
     updateText,
     updateValue,
     showStatus,
-    smoothUpdateHarmonicAmplitude,
     smoothUpdateMasterGain,
     smoothUpdateSystem,
     smoothUpdateSubharmonicMode
 } from './utils.js';
 import { startTone, stopTone, updateAudioProperties, restartAudio, sampleCurrentWaveform, exportAsWAV, addToWaveforms } from './audio.js';
 import { setSpreadFactor } from './visualization.js';
-import { DrawbarControls } from './DrawbarControls.js';
+import { DrawbarControls, setupDrawbars, updateDrawbarLabels } from './DrawbarControls.js';
 import { HelpDialog } from './HelpDialog.js';
-import { FundamentalControls } from './FundamentalControls.js';
+
 import { KeyboardShortcuts } from './KeyboardShortcuts.js';
 
 // ================================
 // INITIALIZATION
 // ================================
-
+// Global instance of DrawbarControls
+let drawbarUI;
 /**
  * Initializes all UI components and event handlers
  */
@@ -48,45 +42,30 @@ export function initUI() {
     setupSystemSelector();
     setupSubharmonicToggle();
     setupWaveformSelector();
-    setupDrawbars();
-    setupResetDrawbarsButton();
-    setupRandomizeDrawbarsButton();
+
+    // Ensure currentSystem is set before rendering drawbars
+    if (!AppState.currentSystem) {
+        AppState.currentSystem = spectralSystems[0];
+    }    
+
+    drawbarUI = new DrawbarControls('drawbars');
+    // Render drawbars immediately on load
+    if (drawbarUI && typeof drawbarUI.render === 'function') {
+        drawbarUI.render();
+    }
+
     // Set initial UI values
     updateFundamentalDisplay();
     updateKeyboardUI();
     populateSystemSelector();
-    updateDrawbarLabels();
+    
     updateSystemDescription();
-// ================================
-// RESET DRAWBARS BUTTON
-// ================================
 
-function setupResetDrawbarsButton() {
-    const resetBtn = document.getElementById('reset-drawbars-button');
-    if (!resetBtn) return;
-    resetBtn.addEventListener('click', () => {
-        const drawbars = document.querySelectorAll('#drawbars .drawbar-slider');
-        drawbars.forEach((slider, idx) => {
-            slider.value = idx === 0 ? slider.max : 0;
-            slider.dispatchEvent(new Event('input', { bubbles: true }));
-        });
-    });
+    // Initialize help and keyboard shortcuts
+    HelpDialog.init();
+    new KeyboardShortcuts().init();
 }
 
-// RANDOMIZE DRAWBARS BUTTON
-// ================================
-function setupRandomizeDrawbarsButton() {
-    const randomizeBtn = document.getElementById('randomize-drawbars-button');
-    if (!randomizeBtn) return;
-    randomizeBtn.addEventListener('click', () => {
-        const drawbars = document.querySelectorAll('#drawbars .drawbar-slider');
-        drawbars.forEach((slider, idx) => {
-            slider.value = slider.max * Math.random(); // 0-100%
-            slider.dispatchEvent(new Event('input', { bubbles: true }));
-        });
-    });
-}
-}
 
 // ================================
 // MAIN CONTROL BUTTONS
@@ -222,27 +201,19 @@ function handleFundamentalChange(e) {
         showStatus("Frequency must be between 0.01 Hz and 10000 Hz.", 'error');
         val = AppState.fundamentalFrequency; // Revert to current value
     }
-
-    updateAppState({ fundamentalFrequency: val });
-    e.target.value = val.toFixed(2);
-
-    // Update MIDI note and keyboard selection
-    const newMidiNote = Math.round(freqToMidi(val));
-    const newOctave = Math.floor(newMidiNote / 12) - 1;
-
-    updateAppState({
-        currentMidiNote: newMidiNote,
-        currentOctave: newOctave
+    import('./UIStateManager.js').then(({ UIStateManager }) => {
+        UIStateManager.setFundamentalByFrequency(val);
+        e.target.value = val.toFixed(2);
     });
-
-    updateKeyboardUI();
-    updateAudioProperties();
 }
 
 function changeOctave(direction) {
     
-    const newMidiNote = AppState.currentMidiNote + (direction * 12);
-    updateFundamental(newMidiNote);
+    import('./UIStateManager.js').then(({ UIStateManager }) => {
+        const state = UIStateManager.getState();
+        const newMidiNote = state.currentMidiNote + (direction * 12);
+        UIStateManager.setFundamentalByMidi(newMidiNote);
+    });
 }
 
 function updateFundamental(newMidi) {
@@ -305,9 +276,12 @@ function setupKeyboard() {
 
 function handleKeyClick(noteIndex) {
     // noteIndex is 0 (C) through 11 (B)
-    const baseMidi = (AppState.currentOctave + 1) * 12;
-    const newMidi = baseMidi + noteIndex;
-    updateFundamental(newMidi);
+    import('./UIStateManager.js').then(({ UIStateManager }) => {
+        const state = UIStateManager.getState();
+        const baseMidi = (state.currentOctave + 1) * 12;
+        const newMidi = baseMidi + noteIndex;
+        UIStateManager.setFundamentalByMidi(newMidi);
+    });
 }
 
 export function updateKeyboardUI() {
@@ -448,86 +422,6 @@ function handleWaveformChange(e) {
     if (AppState.isPlaying) {
         restartAudio();
     }
-}
-
-// ================================
-// DRAWBARS
-// ================================
-
-function setupDrawbars() {
-    const container = document.getElementById('drawbars');
-    if (!container) return;
-
-    container.innerHTML = '';
-    const numPartials = AppState.currentSystem.ratios.length;
-
-    // Resize harmonicAmplitudes to match current system, preserving values where possible
-    const oldAmps = AppState.harmonicAmplitudes || [];
-    const newAmps = [];
-    for (let i = 0; i < numPartials; i++) {
-        newAmps[i] = typeof oldAmps[i] === 'number' ? oldAmps[i] : (i === 0 ? 1.0 : 0.0);
-    }
-    AppState.harmonicAmplitudes = newAmps;
-
-    for (let i = 0; i < numPartials; i++) {
-        const drawbar = createDrawbar(i);
-        container.appendChild(drawbar);
-    }
-}
-
-function createDrawbar(index) {
-    const styleClass = DRAWBAR_STYLES[index] || 'white';
-    const initialValue = AppState.harmonicAmplitudes[index];
-
-    const drawbarDiv = document.createElement('div');
-    drawbarDiv.className = `drawbar ${styleClass}`;
-
-    const labelSpan = document.createElement('span');
-    labelSpan.className = 'drawbar-label';
-    labelSpan.id = `drawbar-label-${index}`;
-    // Use system label for this partial
-    labelSpan.textContent = AppState.currentSystem.labels[index] || '';
-
-    const inputWrapper = document.createElement('div');
-    inputWrapper.className = 'drawbar-input-wrapper';
-
-    const trackDiv = document.createElement('div');
-    trackDiv.className = 'drawbar-track';
-
-    const input = document.createElement('input');
-    input.type = 'range';
-    input.className = 'drawbar-slider';
-    input.min = '0';
-    input.max = '1';
-    input.step = '0.01';
-    input.value = initialValue;
-    input.dataset.index = index;
-
-    input.addEventListener('input', handleDrawbarChange);
-
-    inputWrapper.appendChild(trackDiv);
-    inputWrapper.appendChild(input);
-    drawbarDiv.appendChild(labelSpan);
-    drawbarDiv.appendChild(inputWrapper);
-
-    return drawbarDiv;
-}
-
-function handleDrawbarChange(e) {
-    const index = parseInt(e.target.dataset.index);
-    const value = parseFloat(e.target.value);
-    
-    // Use smooth parameter interpolation to prevent crackling
-    smoothUpdateHarmonicAmplitude(index, value);
-}
-
-function updateDrawbarLabels() {
-    AppState.currentSystem.labels.forEach((label, index) => {
-        const labelElement = document.getElementById(`drawbar-label-${index}`);
-        if (labelElement) {
-            labelElement.textContent = label;
-        }
-    });
 }
 
 // ================================
