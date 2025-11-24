@@ -470,16 +470,7 @@ export function updateUI() {
  * Sets up keyboard shortcuts and accessibility features
  */
 export function setupAccessibility() {
-    document.addEventListener('keydown', (e) => {
-        // Space bar to toggle play/pause
-        if (e.code === 'Space' && e.target.tagName !== 'INPUT') {
-            e.preventDefault();
-            handlePlayToggle();
-        }
-        
-    });
-
-        // Main UI event handlers (drawbars, fundamental, help)
+    // Main UI event handlers (drawbars, fundamental, help)
     document.getElementById('randomize-drawbars-button')?.addEventListener('click', DrawbarControls.randomizeDrawbars);
     document.getElementById('reset-drawbars-button')?.addEventListener('click', DrawbarControls.resetDrawbars);
     HelpDialog.init();
