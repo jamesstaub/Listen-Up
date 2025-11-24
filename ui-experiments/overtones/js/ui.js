@@ -46,6 +46,7 @@ export function initUI() {
     setupWaveformSelector();
     setupDrawbars();
     setupResetDrawbarsButton();
+    setupRandomizeDrawbarsButton();
     // Set initial UI values
     updateFundamentalDisplay();
     updateKeyboardUI();
@@ -63,6 +64,25 @@ function setupResetDrawbarsButton() {
         const drawbars = document.querySelectorAll('#drawbars .drawbar-slider');
         drawbars.forEach((slider, idx) => {
             slider.value = idx === 0 ? slider.max : 0;
+            slider.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+    });
+}
+
+// RANDOMIZE DRAWBARS BUTTON
+// ================================
+function setupRandomizeDrawbarsButton() {
+    const randomizeBtn = document.getElementById('randomize-drawbars-button');
+    if (!randomizeBtn) return;
+    randomizeBtn.addEventListener('click', () => {
+        const drawbars = document.querySelectorAll('#drawbars .drawbar-slider');
+        drawbars.forEach((slider, idx) => {
+            // Fundamental (first drawbar) should be nonzero, others random
+            if (idx === 0) {
+                slider.value = Math.round(slider.max * (0.5 + Math.random() * 0.5)); // 50-100%
+            } else {
+                slider.value = Math.round(slider.max * Math.random()); // 0-100%
+            }
             slider.dispatchEvent(new Event('input', { bubbles: true }));
         });
     });

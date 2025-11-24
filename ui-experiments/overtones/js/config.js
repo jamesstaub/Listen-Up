@@ -428,7 +428,7 @@ export const AppState = {
     currentWaveform: 'sine',
 
     // Visualization properties
-    visualizationFrequency: 2.0,
+    visualizationFrequency: 0.25,
     spreadFactor: 0.2,
 
     // Custom waveforms
