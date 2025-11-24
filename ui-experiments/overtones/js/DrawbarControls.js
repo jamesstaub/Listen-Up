@@ -7,25 +7,8 @@ import { AppState, DRAWBAR_STYLES } from './config.js';
 import { smoothUpdateHarmonicAmplitude } from './utils.js';
 import { UIStateManager } from './UIStateManager.js';
 
-export function updateDrawbarLabels() {
-    AppState.currentSystem.labels.forEach((label, index) => {
-        const labelElement = document.getElementById(`drawbar-label-${index}`);
-        if (labelElement) {
-            labelElement.textContent = label;
-        }
-    });
-}
 
-export function handleDrawbarChange(e) {
-    const index = parseInt(e.target.dataset.index);
-    const value = parseFloat(e.target.value);
-    AppState.harmonicAmplitudes[index] = value;
-    e.target.setAttribute('aria-valuenow', value);
 
-    // Smooth audio update
-    smoothUpdateHarmonicAmplitude(index, value);
-    UIStateManager.setDrawbarGain(index, value);
-}
 
 export function createDrawbar(index) {
     const styleClass = DRAWBAR_STYLES[index] || 'white';
@@ -65,27 +48,6 @@ export function createDrawbar(index) {
     return drawbarDiv;
 }
 
-export function setupDrawbars() {
-    const container = document.getElementById('drawbars');
-    console.log(container)
-    if (!container) return;
-
-    container.innerHTML = '';
-    const numPartials = AppState.currentSystem.ratios.length;
-
-    // Resize harmonicAmplitudes to match current system, preserving values where possible
-    const oldAmps = AppState.harmonicAmplitudes || [];
-    const newAmps = [];
-    for (let i = 0; i < numPartials; i++) {
-        newAmps[i] = typeof oldAmps[i] === 'number' ? oldAmps[i] : (i === 0 ? 1.0 : 0.0);
-    }
-    AppState.harmonicAmplitudes = newAmps;
-
-    for (let i = 0; i < numPartials; i++) {
-        const drawbar = createDrawbar(i);
-        container.appendChild(drawbar);
-    }
-}
 
 
 export class DrawbarControls {
@@ -100,7 +62,7 @@ export class DrawbarControls {
     // Instance Methods
     // ================================
     init() {
-        setupDrawbars();
+
         this.setupResetButton();
         this.setupRandomizeButton();
         updateDrawbarLabels();

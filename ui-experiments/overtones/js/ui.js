@@ -16,17 +16,19 @@ import {
 } from './utils.js';
 import { startTone, stopTone, updateAudioProperties, restartAudio, sampleCurrentWaveform, exportAsWAV, addToWaveforms } from './audio.js';
 import { setSpreadFactor } from './visualization.js';
-import { DrawbarControls, setupDrawbars, updateDrawbarLabels } from './DrawbarControls.js';
+import { DrawbarControls } from './DrawbarControls.js';
 import { HelpDialog } from './HelpDialog.js';
 
 import { KeyboardShortcuts } from './KeyboardShortcuts.js';
 import { setupEventListener, showStatus, updateText, updateValue } from './domUtils.js';
+import { Drawbars } from './modules/drawbars/Drawbars.js';
 
 // ================================
 // INITIALIZATION
 // ================================
-// Global instance of DrawbarControls
-let drawbarUI;
+
+// ui.js
+let drawbars;
 /**
  * Initializes all UI components and event handlers
  */
@@ -44,7 +46,10 @@ export function initUI() {
         AppState.currentSystem = spectralSystems[0];
     }    
 
-    drawbarUI = new DrawbarControls('drawbars');
+
+    drawbars = new Drawbars('drawbars');
+    drawbars.render(); 
+    setupDrawbarEvents();
 
 
     // Set initial UI values
@@ -75,7 +80,7 @@ function setupMainButtons() {
     setupEventListener('add-wave-button', 'click', handleAddToWaveforms);
 }
 
-async function handlePlayToggle() {
+export async function handlePlayToggle() {
     const toggle = document.getElementById('play-toggle');
     const playLabel = document.getElementById('play-label');
     
@@ -339,8 +344,9 @@ function handleSystemChange(e) {
         AppState.harmonicAmplitudes = newAmps;
 
         // Redraw drawbars and update all UI
-        setupDrawbars();
-        updateDrawbarLabels();
+        drawbars.render();
+
+
         updateSystemDescription();
         updateUI();
         if (AppState.p5Instance && typeof AppState.p5Instance.redraw === 'function') {
@@ -395,7 +401,7 @@ function handleSubharmonicToggle() {
     });
     // Use smooth mode update with callback for UI updates that depend on state
     smoothUpdateSubharmonicMode(isSubharmonic, () => {
-        updateDrawbarLabels();
+        drawbars.updateDrawbarLabels();
     });
 }
 
@@ -427,7 +433,7 @@ function handleWaveformChange(e) {
 export function updateUI() {
     updateFundamentalDisplay();
     updateKeyboardUI();
-    updateDrawbarLabels();
+    drawbars.updateDrawbarLabels();
     updateSystemDescription();
     
     // Update slider values
@@ -462,9 +468,28 @@ export function updateUI() {
     }
 }
 
-// ================================
-// ACCESSIBILITY HELPERS
-// ================================
+
+
+function setupDrawbarEvents() {
+
+    // Whenever a spectral system loads, rebuild the drawbars
+    document.addEventListener("system-loaded", () => {
+        drawbars.render();
+    });
+
+    // Whenever drawbar values change, update sliders
+    document.addEventListener("drawbar-change", () => {
+        drawbars.update();
+    });
+
+    document.addEventListener("drawbars-randomized", () => {
+        drawbars.update();
+    });
+
+    document.addEventListener("drawbars-reset", () => {
+        drawbars.update();
+    });
+}
 
 /**
  * Sets up keyboard shortcuts and accessibility features

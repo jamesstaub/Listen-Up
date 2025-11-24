@@ -1,7 +1,9 @@
 // KeyboardShortcuts.js
 // Handles all keyboard event mapping, calls UIStateManager methods
 
+import { DrawbarsActions } from './modules/drawbars/drawbarsActions.js';
 import { UIStateManager } from './UIStateManager.js';
+import { handlePlayToggle } from './ui.js';
 
 export class KeyboardShortcuts {
     constructor() {
@@ -13,8 +15,7 @@ export class KeyboardShortcuts {
             // Always allow spacebar to toggle play/stop
             if (e.code === 'Space') {
                 e.preventDefault();
-                document.getElementById('play-toggle')?.click();
-                return;
+                handlePlayToggle();
             }
 
             // QWERTY row: Fundamental note selection

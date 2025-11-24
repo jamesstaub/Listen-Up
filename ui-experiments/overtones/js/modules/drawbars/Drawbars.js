@@ -1,0 +1,101 @@
+import { AppState, DRAWBAR_STYLES } from "../../config.js";
+import { UIStateManager } from "../../UIStateManager.js";
+import { smoothUpdateHarmonicAmplitude } from "../../utils.js";
+
+// components/Drawbars.js
+export class Drawbars {
+    constructor(containerId) {
+        this.container = document.getElementById(containerId);
+        this.sliders = [];
+    }
+
+    render() {
+        this.sliders = [];
+        this.setupDrawbars();
+        this.updateDrawbarLabels();
+    }
+
+    setupDrawbars() {
+        this.container.innerHTML = '';
+        const numPartials = AppState.currentSystem.ratios.length;
+
+        // Resize harmonicAmplitudes to match current system, preserving values where possible
+        const oldAmps = AppState.harmonicAmplitudes || [];
+        const newAmps = [];
+        for (let i = 0; i < numPartials; i++) {
+            newAmps[i] = typeof oldAmps[i] === 'number' ? oldAmps[i] : (i === 0 ? 1.0 : 0.0);
+        }
+        AppState.harmonicAmplitudes = newAmps;
+
+        for (let i = 0; i < numPartials; i++) {
+            const drawbarDiv = this.createDrawbar(i, newAmps[i]);
+            this.container.appendChild(drawbarDiv);
+        }
+    }
+
+    updateDrawbarLabels() {
+        AppState.currentSystem.labels.forEach((label, index) => {
+            const labelElement = document.getElementById(`drawbar-label-${index}`);
+            if (labelElement) {
+                labelElement.textContent = label;
+            }
+        });
+    }
+
+
+
+    createDrawbar(index, value) {
+        const styleClass = DRAWBAR_STYLES[index] || 'white';
+        const initialValue = AppState.harmonicAmplitudes[index];
+
+        const drawbarDiv = document.createElement('div');
+        drawbarDiv.className = `drawbar ${styleClass}`;
+
+        const labelSpan = document.createElement('span');
+        labelSpan.className = 'drawbar-label';
+        labelSpan.id = `drawbar-label-${index}`;
+        // Use system label for this partial
+        labelSpan.textContent = AppState.currentSystem.labels[index] || '';
+
+        const inputWrapper = document.createElement('div');
+        inputWrapper.className = 'drawbar-input-wrapper';
+
+        const trackDiv = document.createElement('div');
+        trackDiv.className = 'drawbar-track';
+
+        const input = document.createElement('input');
+        input.type = 'range';
+        input.className = 'drawbar-slider';
+        input.min = '0';
+        input.max = '1';
+        input.step = '0.01';
+        input.value = initialValue;
+        input.dataset.index = index;
+        input.value = value;
+
+        input.addEventListener('input', this.handleDrawbarChange);
+
+        inputWrapper.appendChild(trackDiv);
+        inputWrapper.appendChild(input);
+        drawbarDiv.appendChild(labelSpan);
+        drawbarDiv.appendChild(inputWrapper);
+
+        return drawbarDiv;
+    }
+
+    handleDrawbarChange(e) {
+        const index = parseInt(e.target.dataset.index);
+        const value = parseFloat(e.target.value);
+        AppState.harmonicAmplitudes[index] = value;
+        e.target.setAttribute('aria-valuenow', value);
+
+        // Smooth audio update
+        smoothUpdateHarmonicAmplitude(index, value);
+        UIStateManager.setDrawbarGain(index, value);
+    }
+
+
+    setValue(index, value) {
+        this.sliders[index].value = value;
+    }
+}
