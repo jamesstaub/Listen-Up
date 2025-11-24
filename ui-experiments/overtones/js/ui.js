@@ -3,32 +3,33 @@
  * Contains UI event handlers, DOM manipulation, and interface logic
  */
 
-import { 
-    AppState, 
-    updateAppState, 
-    spectralSystems, 
+import {
+    AppState,
+    updateAppState,
+    spectralSystems,
 } from './config.js';
-import { 
-    midiToFreq, 
+import {
+    midiToFreq,
     smoothUpdateMasterGain,
     smoothUpdateSystem,
     smoothUpdateSubharmonicMode
 } from './utils.js';
 import { startTone, stopTone, updateAudioProperties, restartAudio, sampleCurrentWaveform, exportAsWAV, addToWaveforms } from './audio.js';
 import { setSpreadFactor } from './visualization.js';
-import { DrawbarControls } from './DrawbarControls.js';
+
 import { HelpDialog } from './HelpDialog.js';
 
 import { KeyboardShortcuts } from './KeyboardShortcuts.js';
 import { setupEventListener, showStatus, updateText, updateValue } from './domUtils.js';
-import { Drawbars } from './modules/drawbars/Drawbars.js';
+
+import { DrawbarsController } from './modules/drawbars/drawbarsController.js';
 
 // ================================
 // INITIALIZATION
 // ================================
 
-// ui.js
-let drawbars;
+
+let drawbarsController
 /**
  * Initializes all UI components and event handlers
  */
@@ -44,19 +45,17 @@ export function initUI() {
     // Ensure currentSystem is set before rendering drawbars
     if (!AppState.currentSystem) {
         AppState.currentSystem = spectralSystems[0];
-    }    
+    }
 
 
-    drawbars = new Drawbars('drawbars');
-    drawbars.render(); 
-    setupDrawbarEvents();
+    setupDrawbars()
 
 
     // Set initial UI values
     updateFundamentalDisplay();
     updateKeyboardUI();
     populateSystemSelector();
-    
+
     updateSystemDescription();
 
     // Initialize help and keyboard shortcuts
@@ -64,6 +63,18 @@ export function initUI() {
     new KeyboardShortcuts().init();
 }
 
+function setupDrawbars() {
+    drawbarsController = new DrawbarsController();
+    drawbarsController.init();
+
+    document.getElementById("reset-drawbars-button")?.addEventListener("click", () => {
+        drawbarsController.reset();
+    });
+
+    document.getElementById("randomize-drawbars-button")?.addEventListener("click", () => {
+        drawbarsController.randomize();
+    });
+}
 
 // ================================
 // MAIN CONTROL BUTTONS
@@ -72,10 +83,10 @@ export function initUI() {
 function setupMainButtons() {
     // Play/Stop toggle (new navbar toggle)
     setupEventListener('play-toggle', 'click', handlePlayToggle);
-    
+
     // Export WAV button
     setupEventListener('export-wav-button', 'click', handleExportWAV);
-    
+
     // Add to waveforms button
     setupEventListener('add-wave-button', 'click', handleAddToWaveforms);
 }
@@ -83,7 +94,7 @@ function setupMainButtons() {
 export async function handlePlayToggle() {
     const toggle = document.getElementById('play-toggle');
     const playLabel = document.getElementById('play-label');
-    
+
     if (AppState.isPlaying) {
         stopTone();
         toggle.classList.remove('active');
@@ -134,18 +145,18 @@ function setupControlSliders() {
     // Master gain slider
     const masterGainSlider = document.getElementById('master-gain-slider');
     const masterGainDisplay = document.getElementById('master-gain-value');
-    
+
     if (masterGainSlider) {
         // Initialize with AppState value
         masterGainSlider.value = AppState.masterGainValue;
         if (masterGainDisplay) {
             masterGainDisplay.textContent = `${(AppState.masterGainValue * 100).toFixed(0)}%`;
         }
-        
+
         masterGainSlider.addEventListener('input', (e) => {
             const value = parseFloat(e.target.value);
             updateText('master-gain-value', `${(value * 100).toFixed(0)}%`);
-            
+
             // Use smooth parameter interpolation to prevent crackling
             smoothUpdateMasterGain(value);
         });
@@ -154,7 +165,7 @@ function setupControlSliders() {
     // Spread slider
     const spreadSlider = document.getElementById('spread-slider');
     const spreadDisplay = document.getElementById('spread-value');
-    
+
     if (spreadSlider) {
         spreadSlider.addEventListener('input', (e) => {
             const value = parseFloat(e.target.value);
@@ -166,7 +177,7 @@ function setupControlSliders() {
     // Visualization frequency slider
     const vizFreqSlider = document.getElementById('viz-freq-slider');
     const vizFreqDisplay = document.getElementById('viz-freq-value');
-    
+
     if (vizFreqSlider) {
         vizFreqSlider.addEventListener('input', (e) => {
             const value = parseFloat(e.target.value);
@@ -206,7 +217,7 @@ function handleFundamentalChange(e) {
 }
 
 function changeOctave(direction) {
-    
+
     import('./UIStateManager.js').then(({ UIStateManager }) => {
         const state = UIStateManager.getState();
         const newMidiNote = state.currentMidiNote + (direction * 12);
@@ -323,7 +334,7 @@ function populateSystemSelector() {
 
 function handleSystemChange(e) {
     const systemIndex = parseInt(e.target.value);
-    
+
     // Use smooth system update with UI update callback
     smoothUpdateSystem(systemIndex, () => {
         // Resize amplitudes to match new system
@@ -344,7 +355,7 @@ function handleSystemChange(e) {
         AppState.harmonicAmplitudes = newAmps;
 
         // Redraw drawbars and update all UI
-        drawbars.render();
+        drawbarsController.init();
 
 
         updateSystemDescription();
@@ -401,7 +412,8 @@ function handleSubharmonicToggle() {
     });
     // Use smooth mode update with callback for UI updates that depend on state
     smoothUpdateSubharmonicMode(isSubharmonic, () => {
-        drawbars.updateDrawbarLabels();
+        // drawbars.updateDrawbarLabels();
+        drawbarsController.init()
     });
 }
 
@@ -433,72 +445,39 @@ function handleWaveformChange(e) {
 export function updateUI() {
     updateFundamentalDisplay();
     updateKeyboardUI();
-    drawbars.updateDrawbarLabels();
+    // drawbars.updateDrawbarLabels();
+    drawbarsController.init();
+
     updateSystemDescription();
-    
+
     // Update slider values
     updateValue('master-gain-slider', AppState.masterGainValue);
     updateText('master-gain-value', `${(AppState.masterGainValue * 100).toFixed(0)}%`);
-    
+
     updateValue('viz-freq-slider', AppState.visualizationFrequency);
     updateText('viz-freq-value', `${AppState.visualizationFrequency.toFixed(1)} Hz`);
-    
+
     // Update play button state
     const playButton = document.getElementById('play-button');
     if (playButton) {
         playButton.textContent = AppState.isPlaying ? "Stop Tone" : "Start Tone";
         playButton.classList.toggle('playing', AppState.isPlaying);
     }
-    
+
     // Update system selector
     const systemSelect = document.getElementById('ratio-system-select');
     if (systemSelect) {
         const systemIndex = spectralSystems.indexOf(AppState.currentSystem);
         systemSelect.value = systemIndex;
     }
-    
+
     // Update waveform selector
     updateValue('waveform-select', AppState.currentWaveform);
-    
+
     // Update subharmonic toggle
     const toggle = document.getElementById('subharmonic-toggle');
     if (toggle) {
         toggle.classList.toggle('active', AppState.isSubharmonic);
         toggle.setAttribute('aria-checked', AppState.isSubharmonic);
     }
-}
-
-
-
-function setupDrawbarEvents() {
-
-    // Whenever a spectral system loads, rebuild the drawbars
-    document.addEventListener("system-loaded", () => {
-        drawbars.render();
-    });
-
-    // Whenever drawbar values change, update sliders
-    document.addEventListener("drawbar-change", () => {
-        drawbars.update();
-    });
-
-    document.addEventListener("drawbars-randomized", () => {
-        drawbars.update();
-    });
-
-    document.addEventListener("drawbars-reset", () => {
-        drawbars.update();
-    });
-}
-
-/**
- * Sets up keyboard shortcuts and accessibility features
- */
-export function setupAccessibility() {
-    // Main UI event handlers (drawbars, fundamental, help)
-    document.getElementById('randomize-drawbars-button')?.addEventListener('click', DrawbarControls.randomizeDrawbars);
-    document.getElementById('reset-drawbars-button')?.addEventListener('click', DrawbarControls.resetDrawbars);
-    HelpDialog.init();
-    // Keyboard shortcuts
-    const kb = (new KeyboardShortcuts().init());
 }

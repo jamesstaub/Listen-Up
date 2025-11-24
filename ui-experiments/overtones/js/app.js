@@ -7,7 +7,7 @@ import { AppState, updateAppState } from './config.js';
 import { momentumSmoother } from './momentum-smoother.js';
 import { initAudio } from './audio.js';
 import { initVisualization } from './visualization.js';
-import { initUI, updateUI, setupAccessibility } from './ui.js';
+import { initUI, updateUI } from './ui.js';
 import { showStatus } from './domUtils.js';
 
 // ================================
@@ -26,7 +26,7 @@ function initApp() {
         initVisualization();
         
         // Set up accessibility features
-        setupAccessibility();
+
         
         // Update UI to reflect initial state
         updateUI();

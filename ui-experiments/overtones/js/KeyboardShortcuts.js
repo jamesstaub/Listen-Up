@@ -16,6 +16,7 @@ export class KeyboardShortcuts {
             if (e.code === 'Space') {
                 e.preventDefault();
                 handlePlayToggle();
+                return
             }
 
             // QWERTY row: Fundamental note selection
