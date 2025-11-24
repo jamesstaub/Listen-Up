@@ -153,20 +153,16 @@
 /* ================================
    CANVAS & VISUALIZATION
    ================================ */
-
-.visualization-section {
-    display: flex;
-    position: relative;
-    gap: 1rem;
-    margin-bottom: 1.5rem;
-    width: 100%;
-    min-height: 400px; /* Ensure adequate height */
-}
-
 #tonewheel-container {
-    flex: 1; /* Equal space - 50% */
-    position: relative; /* Enable absolute positioning for overlay */
-    min-width: 400px; /* Ensure tonewheel doesn't collapse */
+    flex: 1 1 0%;
+    position: relative;
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+    display: flex;
+    align-items: stretch;
+    justify-content: stretch;
 }
 
 /* Tonewheel Controls Overlay */
@@ -275,15 +271,15 @@ canvas {
     border-radius: 0.5rem;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
     background-color: #0d131f;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 100% !important;
+    min-height: 220px;
+    object-fit: contain;
 }
 
 /* Responsive canvas layout - mobile/tablet only */
 @media (max-width: 768px) {
-    .visualization-section {
-        flex-direction: column;
-        min-height: auto;
-        gap: 20px;
-    }
     
     #tonewheel-container {
         flex: none;

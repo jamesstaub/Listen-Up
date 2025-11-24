@@ -384,7 +384,7 @@ export const BASE_OCTAVE_MIDI = 48; // MIDI for C3
 
 export const WAVETABLE_SIZE = 4096; // Standard size for a PeriodicWave table
 export const NUM_HARMONICS = 12;
-export const DEFAULT_MASTER_GAIN = 0.03;
+export const DEFAULT_MASTER_GAIN = 0.3;
 
 // Visualization constants
 export const VISUAL_HARMONIC_TERMS = 12;

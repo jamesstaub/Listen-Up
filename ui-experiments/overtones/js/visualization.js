@@ -177,10 +177,9 @@ export function createVisualizationSketch() {
                 const ratio = AppState.currentSystem.ratios[h];
                 const ringRadius = laneRadii[h];
 
-                // Full visual amplitude independent of gain
+                // Visual amplitude now depends on both gain and spreadFactor
                 const MAX_RING_MOD = 0.45;       // max radial wiggle
-                
-                const visualAmp = MAX_RING_MOD * (maxAmplitudeRadial / numHarmonics) * spreadFactor;
+                const visualAmp = MAX_RING_MOD * (maxAmplitudeRadial / numHarmonics) * spreadFactor * amp;
 
                 p.stroke(p.color(HARMONIC_COLORS[h] + '99'));
                 p.strokeWeight(1.5);

@@ -164,24 +164,12 @@
   }
   
   /* Layout & Visualization Components */
-  .visualization-section {
-    display: flex;
-    gap: 1.25rem;
-    min-height: calc(100vh - 140px);
-    padding: 1.25rem;
-  }
-    
+
   /* Control Overlay Components */
   .controls-overlay {
-    position: absolute;
-    top: 1rem;
-    right: 1rem;
     z-index: 10;
   }
   
-  .controls-overlay > * + * {
-    margin-top: 1rem;
-  }
   
   .labeled-control {
     display: flex;
@@ -288,21 +276,7 @@
 /* ================================
    RESPONSIVE STYLES
    ================================ */
-@media (max-width: 768px) {
-  .visualization-section {
-    flex-direction: column;
-    gap: 1rem;
-    min-height: auto;
-  }
-  
-  /* .canvas-container,
-  .waveform-container {
-    flex: none;
-    max-width: none;
-    min-width: 300px;
-    width: 100%;
-  } */
-  
+@media (max-width: 768px) {  
   .navbar {
     padding: 0 1rem;
   }
@@ -313,10 +287,6 @@
   .waveform-container {
     min-width: 280px;
   } */
-  
-  .visualization-section {
-    gap: 1rem;
-  }
   
   .navbar-control-group {
     min-width: 200px;
